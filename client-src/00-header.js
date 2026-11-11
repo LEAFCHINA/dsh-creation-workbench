@@ -29,7 +29,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-image-workbench'
-    const BUILD = '2026-11-11-client-m2-21'
+    const BUILD = '2026-11-12-client-m2-22'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.image-workbench.v1.ui'
 
