@@ -1,5 +1,8 @@
 # AI 生图工作台 · dsh-image-workbench
 
+![check](https://github.com/LEAFCHINA/dsh-image-workbench/actions/workflows/check.yml/badge.svg)
+![license](https://img.shields.io/badge/license-MIT-blue)
+
 A conversational image workbench plugin for [DeepSeek Harness](https://github.com/deepseek-ai) (DSH): workspaces and conversations on the left, a canvas-style result grid on the right — powered either by a third-party image API or by your **local ComfyUI workflows**.
 
 DeepSeek Harness 的对话式生图插件：左侧工作区 / 会话，右侧画布式排版；支持第三方生图 API，也可以直接调用**本机 ComfyUI 工作流**。

@@ -19,7 +19,7 @@ Get-ChildItem -Recurse -File -Include *.json,*.md,*.yml,LICENSE | ForEach-Object
 ## 1\. 建仓库并推送
 
 ```powershell
-cd "C:\Users\Yeafc\Documents\Deepseek Harness\AI\dsh-image-workbench-github"
+cd "C:\path\to\dsh-image-workbench-github"
 git init
 git add -A
 git commit -m "feat: DSH AI image workbench v1.2.2 (API + local ComfyUI workflows)"
