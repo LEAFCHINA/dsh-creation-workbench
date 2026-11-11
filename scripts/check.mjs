@@ -59,9 +59,26 @@ if (!patch.includes(`name: ${pkg.name}`) && !patch.includes(`name: '${pkg.name}'
   problems.push(`cordis.patch.yml does not reference package name "${pkg.name}"`)
 }
 
+// 5. the client bundle MUST register under the package name.
+// DSH's client-modules loader keys every bundle factory by package name and
+// rejects a bundle whose `__ModuleLoader__.load({ id })` differs (boot then
+// fails with "duplicate factory registration"). This bit us once when the
+// package was renamed and the id stayed `@local/...`, so it is checked here.
+if (pkg.dsh.client) {
+  const clientBundle = readFileSync(join(ROOT, 'client.js'), 'utf8')
+  const match = clientBundle.match(/__ModuleLoader__[\s\S]{0,200}?\.load\(\s*\{[\s\S]{0,200}?id:\s*'([^']+)'/)
+  if (!match) {
+    problems.push('client.js does not register through window.__ModuleLoader__.load({ id })')
+  } else if (match[1] !== pkg.name) {
+    problems.push(
+      `client module id "${match[1]}" does not match package name "${pkg.name}" (boot would fail: duplicate factory registration)`,
+    )
+  }
+}
+
 if (problems.length > 0) {
   console.error('checks failed:')
   for (const problem of problems) console.error(`  - ${problem}`)
   process.exit(1)
 }
-console.log(`checks passed: ${jsFiles.length} JS files, dsh.bundle declared, client.js fresh`)
+console.log(`checks passed: ${jsFiles.length} JS files, dsh.bundle declared, client id matches package name, client.js fresh`)

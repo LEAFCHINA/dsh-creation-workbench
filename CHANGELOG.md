@@ -10,6 +10,10 @@ First public release: **1.2.2**.
   could not activate at boot and the bundle was executed twice
   (`client-modules: duplicate factory registration`), which aborted the web boot.
   The module id now matches the package name.
+- `npm run check` now fails when the client bundle id and the package name
+  differ, so a rename cannot silently reintroduce the boot failure.
+  (For the same reason, install `v1.2.3` or later from git — not the `1.2.2`
+  commit before this fix.)
 
 ## 1.2.2
 
