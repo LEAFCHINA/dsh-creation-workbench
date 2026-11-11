@@ -2,6 +2,15 @@
 
 First public release: **1.2.2**.
 
+## 1.2.3
+
+- Fix: the client bundle registered itself under the old module id
+  `@local/dsh-image-workbench` while the package is now named
+  `dsh-image-workbench`. DSH keys client plugins by package name, so the entry
+  could not activate at boot and the bundle was executed twice
+  (`client-modules: duplicate factory registration`), which aborted the web boot.
+  The module id now matches the package name.
+
 ## 1.2.2
 
 - Fix: re-editing a saved workflow no longer re-ticks suggested parameters that were explicitly unchecked in an earlier edit round.
