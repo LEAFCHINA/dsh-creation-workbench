@@ -30,7 +30,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-11-host-19'
+export const HOST_BUILD = '2026-11-12-host-20'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -420,6 +420,31 @@ function normalizeGenParams(raw) {
       }
     }
     params.workflowParams = workflowParams
+    // v1.2.4: per-generation randomize overrides for numeric workflow params
+    // (the composer can toggle "随机" without editing the saved workflow).
+    const randomizeSource = raw.workflowRandomize
+    const workflowRandomize = {}
+    if (randomizeSource !== undefined && randomizeSource !== null) {
+      if (!isPlainObject(randomizeSource)) {
+        throw new ApiError('随机参数设置（workflowRandomize）必须是对象', 'INVALID_REQUEST', 400)
+      }
+      let randomizeCount = 0
+      for (const [key, value] of Object.entries(randomizeSource)) {
+        if (randomizeCount >= 200) break
+        const name = String(key || '').trim()
+        if (!name) continue
+        if (typeof value !== 'boolean') {
+          throw new ApiError(
+            `随机参数「${truncate(name, 60)}」的取值必须是布尔值`,
+            'INVALID_REQUEST',
+            400,
+          )
+        }
+        workflowRandomize[name.slice(0, 100)] = value
+        randomizeCount += 1
+      }
+    }
+    params.workflowRandomize = workflowRandomize
     const displayName = typeof raw.displayName === 'string' ? raw.displayName.trim() : ''
     if (displayName) params.displayName = displayName.slice(0, 200)
   }

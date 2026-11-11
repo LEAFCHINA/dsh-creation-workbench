@@ -682,6 +682,24 @@
               : 'running'
             const progress = clamp(num(job.progress, 0), 0, 1)
             updateJob({ status, progress, error: str(job.error) || null })
+            // v1.2.4: ComfyUI randomized numeric params — show the value that was
+            // actually drawn once the run settles, so the number next to the
+            // "随机" toggle changes after every generation.
+            if (status === 'done' && isObj(job.randomValues)) {
+              const randomValues = job.randomValues
+              const currentWorkflowId =
+                str(paramsRef.current.workflowId) || comfyWorkflowIdOf(paramsRef.current.model)
+              const jobWorkflowId = str(job.workflowId)
+              if (!jobWorkflowId || !currentWorkflowId || jobWorkflowId === currentWorkflowId) {
+                setParams((previous) => ({
+                  ...previous,
+                  workflowParams: {
+                    ...(isObj(previous.workflowParams) ? previous.workflowParams : {}),
+                    ...randomValues,
+                  },
+                }))
+              }
+            }
             if (status === 'done' || status === 'error' || status === 'cancelled') {
               deadJobIdsRef.current.add(jobId)
               settleJob(status, progress, str(job.error) || null)

@@ -2,6 +2,19 @@
 
 First public release: **1.2.2**.
 
+## 1.2.4
+
+- Composer: the **张数** selector is now tied to the workflow's exposed
+  `batch_size` input. A workflow without it runs exactly one prompt per send
+  and the selector is hidden (one run = one image), instead of appearing to
+  offer a count that had no workflow parameter behind it.
+- Numeric workflow params now have a **随机** checkbox right beside the number
+  in the composer param row, so a seed can be randomized per generation without
+  opening the workflow editor. The host honours the per-generation override
+  (`workflowRandomize`), reports the values actually drawn
+  (`job.get.randomValues`), and the composer updates the displayed number after
+  each completed run.
+
 ## 1.2.3
 
 - Fix: the client bundle registered itself under the old module id

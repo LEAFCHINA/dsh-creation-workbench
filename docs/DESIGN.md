@@ -64,9 +64,14 @@ user-readable Chinese message.
    param specs (clamp numbers, validate select options, fill defaults).
 2. Deep-copy the stored graph and write the values into `graph[nodeId].inputs`.
 3. For every param with `role: "prompt"`, write the composer prompt text.
-4. For `randomize` numeric params, generate a value first.
+4. Randomize numeric params: by default when the spec has `randomize: true`, but
+   the client may override it per generation through
+   `params.workflowRandomize = { [paramKey]: boolean }`. Drawn values are
+   collected and returned to the client (`job.get.randomValues`, plus
+   `workflowId`) so the composer can display the number that was used.
 5. `n`: if the workflow exposes `batch_size`, queue once with that value;
-   otherwise queue `n` times.
+   otherwise queue `n` times. The client only offers a count selector when
+   `batch_size` is exposed, and sends `n = 1` otherwise.
 6. `POST /prompt` → poll `GET /history/<prompt_id>` (800 ms) → fetch every image
    in `outputs[*].images` through `GET /view?...` → return bytes.
 7. Cancellation posts the prompt id to `POST /queue { delete: [...] }`.

@@ -20,6 +20,7 @@ ComfyUI workflows in the composer — the exposed node inputs become wrapping co
   - **Local ComfyUI workflows**: import an API-format workflow, choose which node inputs to expose, then pick the workflow in the composer and tweak its parameters.
 - **Workspaces, conversations, canvas** — generated images are grouped per turn and saved as `保存目录/工作区/会话/图片ID.png` on disk.
 - **ComfyUI parameter exposure** — per input: label, type (text / int / float / bool / select), min/max/step, options, default, randomize (seeds); searchable two-pane node picker.
+- **Inline per-generation controls** — numeric params carry a **随机** toggle right in the composer, and the value that was actually drawn is shown after each run. The **张数** selector only appears when the workflow exposes a `batch_size` input; a workflow without it runs once per send.
 - **Prompt binding** — one exposed text input is explicitly bound to the composer, so the prompt you type always reaches the workflow. Unbound workflows show a clickable warning instead of silently dropping the text.
 - **Multi-image, cancel/timeout, retry, image detail view**.
 - **Local files** — configurable image directory, save-as, open folder, copy path.

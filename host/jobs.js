@@ -17,6 +17,7 @@ const {
   ApiError,
   nowIso,
   truncate,
+  isPlainObject,
   normalizeJobTimeoutMs,
   JOB_TIMEOUT_DEFAULT_MS,
   JOB_TIMEOUT_GRACE_MS,
@@ -89,6 +90,19 @@ function jobView(job) {
     status: job.status,
     progress: job.progress,
     turnId: job.turnId,
+  }
+  // v1.2.4: expose the ComfyUI values drawn for randomized params so the
+  // composer can show the new number once the turn completes.
+  if (isPlainObject(job.params)) {
+    if (typeof job.params.workflowId === 'string' && job.params.workflowId) {
+      view.workflowId = job.params.workflowId
+    }
+    if (
+      isPlainObject(job.params.workflowRandomValues) &&
+      Object.keys(job.params.workflowRandomValues).length > 0
+    ) {
+      view.randomValues = { ...job.params.workflowRandomValues }
+    }
   }
   if (job.error) {
     view.error = job.error

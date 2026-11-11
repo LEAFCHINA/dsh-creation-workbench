@@ -869,11 +869,23 @@ function randomParamValue(spec) {
   return Math.round(value * 1e6) / 1e6
 }
 
-function buildWorkflowGraph(template, specs, values) {
+/**
+ * Write the resolved values into a copy of the stored API-format workflow.
+ * `randomizeKeys` (optional) overrides the per-spec `randomize` flag for this
+ * generation; `usedRandom` collects the values actually drawn so the composer
+ * can show them after the run.
+ */
+function buildWorkflowGraph(template, specs, values, randomizeKeys, usedRandom) {
   const graph = JSON.parse(JSON.stringify(template))
   for (const spec of specs) {
     let value = values[spec.key]
-    if (spec.randomize === true) value = randomParamValue(spec)
+    const shouldRandomize = randomizeKeys
+      ? randomizeKeys.has(spec.key)
+      : spec.randomize === true
+    if (shouldRandomize) {
+      value = randomParamValue(spec)
+      if (usedRandom && typeof usedRandom === 'object') usedRandom[spec.key] = value
+    }
     const node = graph[spec.nodeId]
     if (!isPlainObject(node) || !isPlainObject(node.inputs)) continue
     if (!Object.prototype.hasOwnProperty.call(node.inputs, spec.inputName)) continue
@@ -1163,13 +1175,41 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
     }
   }
 
+  // v1.2.4: per-generation randomize override from the composer. Numeric params
+  // can be toggled there without editing the saved workflow; the override wins
+  // over spec.randomize, and the values actually drawn are reported back so the
+  // composer can display the new number after each run.
+  const randomizeOverride = isPlainObject(rawParams.workflowRandomize)
+    ? rawParams.workflowRandomize
+    : null
+  const randomizeKeys = new Set()
+  for (const spec of specification) {
+    if (!spec || (spec.type !== 'int' && spec.type !== 'float')) continue
+    const override = randomizeOverride &&
+      Object.prototype.hasOwnProperty.call(randomizeOverride, spec.key)
+      ? randomizeOverride[spec.key]
+      : undefined
+    const effective = override === undefined ? spec.randomize === true : override === true
+    if (effective) randomizeKeys.add(spec.key)
+  }
+  const usedRandom = {}
+
   const timeoutMs = normalizeJobTimeoutMs(settings?.jobTimeoutMs)
   const clientId = newClientId()
   const images = []
   try {
     for (let index = 0; index < batches; index += 1) {
       if (signal?.aborted) throw makeAbortError()
-      const graph = buildWorkflowGraph(workflow.json, specification, values)
+      const graph = buildWorkflowGraph(
+        workflow.json,
+        specification,
+        values,
+        randomizeKeys,
+        usedRandom,
+      )
+      if (isPlainObject(params) && Object.keys(usedRandom).length > 0) {
+        params.workflowRandomValues = { ...usedRandom }
+      }
       if (onProgress) onProgress(0.1)
       const promptId = await submitPrompt(baseUrl, graph, clientId, { signal, timeoutMs })
       if (onProgress) onProgress(0.3)

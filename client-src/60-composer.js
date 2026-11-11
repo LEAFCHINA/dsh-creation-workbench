@@ -51,6 +51,12 @@
       const workflowParams =
         activeWorkflow && Array.isArray(activeWorkflow.params) ? activeWorkflow.params : []
       const workflowParamValues = isObj(params.workflowParams) ? params.workflowParams : {}
+      // v1.2.4: the 张数 selector is tied to the workflow's batch_size input.
+      // API dialects always show it; ComfyUI workflows only when batch_size is
+      // one of the exposed params.
+      const workflowBatch = workflowBatchSpec(activeWorkflow)
+      const batchParamKey = workflowBatch ? str(workflowBatch.key) : ''
+      const showCount = !comfy || !!workflowBatch
       // v1.2.2: surface the "no prompt binding" case instead of silently
       // dropping the composer text for a ComfyUI workflow.
       const hasPromptBinding = workflowParams.some((spec) => !!spec && spec.role === 'prompt')
@@ -269,6 +275,20 @@
         })
       }
 
+      // v1.2.4: toggle "每次随机" for one numeric param straight from the composer.
+      const updateWorkflowRandomize = (key, value) => {
+        if (!onParamsChange) return
+        const nextRandomize = {
+          ...(isObj(params.workflowRandomize) ? params.workflowRandomize : {}),
+          [key]: !!value,
+        }
+        onParamsChange({
+          ...params,
+          workflowId: activeWorkflowId,
+          workflowRandomize: nextRandomize,
+        })
+      }
+
       // v1.2: one dynamic control of the selected ComfyUI workflow.
       const renderWorkflowParam = (spec) => {
         const key = str(spec.key) || `${spec.nodeId}.${spec.inputName}`
@@ -277,7 +297,12 @@
         const hasValue = Object.prototype.hasOwnProperty.call(workflowParamValues, key)
         const rawValue = hasValue ? workflowParamValues[key] : spec.default
         const textValue = rawValue === undefined || rawValue === null ? '' : String(rawValue)
+        const randomizeMap = isObj(params.workflowRandomize) ? params.workflowRandomize : {}
+        const randomizeOn = Object.prototype.hasOwnProperty.call(randomizeMap, key)
+          ? !!randomizeMap[key]
+          : !!spec.randomize
         let control = null
+        let randomControl = null
         if (spec.type === 'select') {
           control = h(Select, {
             className: 'iw-param-select',
@@ -301,7 +326,7 @@
             min: spec.min != null ? spec.min : undefined,
             max: spec.max != null ? spec.max : undefined,
             value: textValue,
-            title,
+            title: randomizeOn ? `${title} · 已开启随机（显示上次生成值）` : title,
             onChange: (event) => {
               const nextText = event.target.value
               if (nextText === '') {
@@ -313,6 +338,18 @@
               updateWorkflowParam(key, spec.type === 'int' ? Math.round(number) : number)
             },
           })
+          // v1.2.4: per-generation randomization for numeric params, right next
+          // to the number — no trip to the settings editor required.
+          randomControl = h(
+            'label',
+            { className: 'iw-param-check iw-param-random', title: '每次生成随机取值（如种子）' },
+            h('input', {
+              type: 'checkbox',
+              checked: randomizeOn,
+              onChange: (event) => updateWorkflowRandomize(key, !!event.target.checked),
+            }),
+            '随机',
+          )
         } else {
           control = h('input', {
             className: 'iw-input iw-param-text',
@@ -335,6 +372,7 @@
           { key, className: 'iw-param-item', title },
           h('span', { className: 'iw-param-label' }, label),
           control,
+          randomControl,
         )
       }
 
@@ -526,10 +564,15 @@
                         // v1.2: entering workflow mode drops reference images
                         // (unsupported) and the previous workflow's values.
                         if (nextWorkflowId && typeof onClearRefs === 'function') onClearRefs()
+                        // v1.2.4: a workflow without batch_size runs once per
+                        // send, so reset the stale 张数 value to 1.
+                        const nextWorkflow = findWorkflowById(workflowList, nextWorkflowId)
+                        const nextHasBatch = !!workflowBatchSpec(nextWorkflow)
                         onParamsChange({
                           ...params,
                           model: value,
                           quality: nextQuality,
+                          n: nextWorkflowId && !nextHasBatch ? 1 : params.n,
                           workflowId: nextWorkflowId,
                           workflowParams: nextWorkflowId ? { ...workflowParamValues } : {},
                         })
@@ -575,16 +618,18 @@
                       onChange: (value) => updateParam('quality', value),
                       title: '质量',
                     }),
-                h(Select, {
-                  className: 'iw-select-count',
-                  value: String(params.n),
-                  options: Array.from({ length: maxN }).map((_, index) => ({
-                    value: String(index + 1),
-                    label: `${index + 1} 张`,
-                  })),
-                  onChange: (value) => updateParam('n', Number(value) || 1),
-                  title: '生成张数',
-                }),
+                showCount
+                  ? h(Select, {
+                      className: 'iw-select-count',
+                      value: String(params.n),
+                      options: Array.from({ length: maxN }).map((_, index) => ({
+                        value: String(index + 1),
+                        label: `${index + 1} 张`,
+                      })),
+                      onChange: (value) => updateParam('n', Number(value) || 1),
+                      title: '生成张数',
+                    })
+                  : null,
               ),
               // v1.3: send button is a sibling of the wrapping controls group
               // (fixed flex item at the row end) so it can never be clipped.
@@ -612,7 +657,10 @@
                   { className: 'iw-composer-params' },
                   activeWorkflow && workflowParams.length
                     ? workflowParams
-                        .filter((spec) => spec && spec.role !== 'prompt')
+                        .filter(
+                          (spec) =>
+                            spec && spec.role !== 'prompt' && str(spec.key) !== batchParamKey,
+                        )
                         .map((spec) => renderWorkflowParam(spec))
                     : h(
                         'span',

@@ -470,6 +470,8 @@ window.__ModuleLoader__.load({
 .iw-param-select{max-width:170px;height:26px;font-size:11.5px}
 .iw-param-select .iw-select{max-width:170px;height:26px;font-size:11.5px}
 .iw-param-check{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--dsw-alias-label-secondary);cursor:pointer;white-space:nowrap}
+.iw-param-random{font-size:10.5px;gap:3px;margin-left:1px;opacity:.92}
+.iw-param-random input{width:12px;height:12px;margin:0}
 .iw-comfy-workflow-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--dsw-alias-border-l1)}
 .iw-comfy-workflow-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .iw-comfy-param-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 0}
@@ -718,6 +720,33 @@ window.__ModuleLoader__.load({
         else if (typeof value === 'number' && isFinite(value)) out[key] = value
       }
       return out
+    }
+
+    /** v1.2.4: per-generation randomize flags for numeric workflow params. */
+    function normalizeWorkflowRandomize(raw) {
+      const out = {}
+      if (!isObj(raw)) return out
+      for (const key of Object.keys(raw)) {
+        if (typeof raw[key] === 'boolean') out[key] = raw[key]
+      }
+      return out
+    }
+
+    /**
+     * v1.2.4: the workflow's exposed `batch_size` input (if any). The composer's
+     * 张数 selector is only shown when this exists — otherwise one prompt run
+     * equals one image and a count selector would be misleading.
+     */
+    function workflowBatchSpec(workflow) {
+      const params = workflow && Array.isArray(workflow.params) ? workflow.params : []
+      return (
+        params.find(
+          (spec) =>
+            spec &&
+            spec.inputName === 'batch_size' &&
+            (spec.type === 'int' || spec.type === 'float'),
+        ) || null
+      )
     }
 
     /** v1.2: one exposed parameter of a saved workflow (no `json`). */
@@ -974,6 +1003,7 @@ window.__ModuleLoader__.load({
         n: DEFAULT_PARAMS.n,
         workflowId: DEFAULT_PARAMS.workflowId,
         workflowParams: {},
+        workflowRandomize: {},
       }
     }
 
@@ -988,6 +1018,7 @@ window.__ModuleLoader__.load({
       // model validation), and the persisted workflow values are sanitized.
       params.workflowId = comfyWorkflowIdOf(source.model) || str(source.workflowId)
       params.workflowParams = normalizeWorkflowParams(source.workflowParams)
+      params.workflowRandomize = normalizeWorkflowRandomize(source.workflowRandomize)
       return params
     }
 
@@ -1017,6 +1048,23 @@ window.__ModuleLoader__.load({
         }
         result.workflowId = workflowId
         if (workflow && workflow.name) result.displayName = workflow.name
+        // v1.2.4: 张数 is only meaningful when the workflow exposes batch_size.
+        // Other workflows run exactly once per send (one image per run).
+        if (!workflowBatchSpec(workflow)) result.n = 1
+        // v1.2.4: send the effective randomize flag for every declared numeric
+        // param so the composer toggle works without editing the saved workflow.
+        const randomizeSource = normalizeWorkflowRandomize(source.workflowRandomize)
+        const randomize = {}
+        const declaredParams = workflow && Array.isArray(workflow.params) ? workflow.params : []
+        for (const spec of declaredParams) {
+          if (!spec) continue
+          if (spec.inputName === 'batch_size') continue
+          if (spec.type !== 'int' && spec.type !== 'float') continue
+          randomize[spec.key] = Object.prototype.hasOwnProperty.call(randomizeSource, spec.key)
+            ? !!randomizeSource[spec.key]
+            : !!spec.randomize
+        }
+        result.workflowRandomize = randomize
         return result
       }
       if (dialect === DIALECT.xai) {
@@ -3442,6 +3490,12 @@ window.__ModuleLoader__.load({
       const workflowParams =
         activeWorkflow && Array.isArray(activeWorkflow.params) ? activeWorkflow.params : []
       const workflowParamValues = isObj(params.workflowParams) ? params.workflowParams : {}
+      // v1.2.4: the 张数 selector is tied to the workflow's batch_size input.
+      // API dialects always show it; ComfyUI workflows only when batch_size is
+      // one of the exposed params.
+      const workflowBatch = workflowBatchSpec(activeWorkflow)
+      const batchParamKey = workflowBatch ? str(workflowBatch.key) : ''
+      const showCount = !comfy || !!workflowBatch
       // v1.2.2: surface the "no prompt binding" case instead of silently
       // dropping the composer text for a ComfyUI workflow.
       const hasPromptBinding = workflowParams.some((spec) => !!spec && spec.role === 'prompt')
@@ -3660,6 +3714,20 @@ window.__ModuleLoader__.load({
         })
       }
 
+      // v1.2.4: toggle "每次随机" for one numeric param straight from the composer.
+      const updateWorkflowRandomize = (key, value) => {
+        if (!onParamsChange) return
+        const nextRandomize = {
+          ...(isObj(params.workflowRandomize) ? params.workflowRandomize : {}),
+          [key]: !!value,
+        }
+        onParamsChange({
+          ...params,
+          workflowId: activeWorkflowId,
+          workflowRandomize: nextRandomize,
+        })
+      }
+
       // v1.2: one dynamic control of the selected ComfyUI workflow.
       const renderWorkflowParam = (spec) => {
         const key = str(spec.key) || `${spec.nodeId}.${spec.inputName}`
@@ -3668,7 +3736,12 @@ window.__ModuleLoader__.load({
         const hasValue = Object.prototype.hasOwnProperty.call(workflowParamValues, key)
         const rawValue = hasValue ? workflowParamValues[key] : spec.default
         const textValue = rawValue === undefined || rawValue === null ? '' : String(rawValue)
+        const randomizeMap = isObj(params.workflowRandomize) ? params.workflowRandomize : {}
+        const randomizeOn = Object.prototype.hasOwnProperty.call(randomizeMap, key)
+          ? !!randomizeMap[key]
+          : !!spec.randomize
         let control = null
+        let randomControl = null
         if (spec.type === 'select') {
           control = h(Select, {
             className: 'iw-param-select',
@@ -3692,7 +3765,7 @@ window.__ModuleLoader__.load({
             min: spec.min != null ? spec.min : undefined,
             max: spec.max != null ? spec.max : undefined,
             value: textValue,
-            title,
+            title: randomizeOn ? `${title} · 已开启随机（显示上次生成值）` : title,
             onChange: (event) => {
               const nextText = event.target.value
               if (nextText === '') {
@@ -3704,6 +3777,18 @@ window.__ModuleLoader__.load({
               updateWorkflowParam(key, spec.type === 'int' ? Math.round(number) : number)
             },
           })
+          // v1.2.4: per-generation randomization for numeric params, right next
+          // to the number — no trip to the settings editor required.
+          randomControl = h(
+            'label',
+            { className: 'iw-param-check iw-param-random', title: '每次生成随机取值（如种子）' },
+            h('input', {
+              type: 'checkbox',
+              checked: randomizeOn,
+              onChange: (event) => updateWorkflowRandomize(key, !!event.target.checked),
+            }),
+            '随机',
+          )
         } else {
           control = h('input', {
             className: 'iw-input iw-param-text',
@@ -3726,6 +3811,7 @@ window.__ModuleLoader__.load({
           { key, className: 'iw-param-item', title },
           h('span', { className: 'iw-param-label' }, label),
           control,
+          randomControl,
         )
       }
 
@@ -3917,10 +4003,15 @@ window.__ModuleLoader__.load({
                         // v1.2: entering workflow mode drops reference images
                         // (unsupported) and the previous workflow's values.
                         if (nextWorkflowId && typeof onClearRefs === 'function') onClearRefs()
+                        // v1.2.4: a workflow without batch_size runs once per
+                        // send, so reset the stale 张数 value to 1.
+                        const nextWorkflow = findWorkflowById(workflowList, nextWorkflowId)
+                        const nextHasBatch = !!workflowBatchSpec(nextWorkflow)
                         onParamsChange({
                           ...params,
                           model: value,
                           quality: nextQuality,
+                          n: nextWorkflowId && !nextHasBatch ? 1 : params.n,
                           workflowId: nextWorkflowId,
                           workflowParams: nextWorkflowId ? { ...workflowParamValues } : {},
                         })
@@ -3966,16 +4057,18 @@ window.__ModuleLoader__.load({
                       onChange: (value) => updateParam('quality', value),
                       title: '质量',
                     }),
-                h(Select, {
-                  className: 'iw-select-count',
-                  value: String(params.n),
-                  options: Array.from({ length: maxN }).map((_, index) => ({
-                    value: String(index + 1),
-                    label: `${index + 1} 张`,
-                  })),
-                  onChange: (value) => updateParam('n', Number(value) || 1),
-                  title: '生成张数',
-                }),
+                showCount
+                  ? h(Select, {
+                      className: 'iw-select-count',
+                      value: String(params.n),
+                      options: Array.from({ length: maxN }).map((_, index) => ({
+                        value: String(index + 1),
+                        label: `${index + 1} 张`,
+                      })),
+                      onChange: (value) => updateParam('n', Number(value) || 1),
+                      title: '生成张数',
+                    })
+                  : null,
               ),
               // v1.3: send button is a sibling of the wrapping controls group
               // (fixed flex item at the row end) so it can never be clipped.
@@ -4003,7 +4096,10 @@ window.__ModuleLoader__.load({
                   { className: 'iw-composer-params' },
                   activeWorkflow && workflowParams.length
                     ? workflowParams
-                        .filter((spec) => spec && spec.role !== 'prompt')
+                        .filter(
+                          (spec) =>
+                            spec && spec.role !== 'prompt' && str(spec.key) !== batchParamKey,
+                        )
                         .map((spec) => renderWorkflowParam(spec))
                     : h(
                         'span',
@@ -7623,6 +7719,24 @@ window.__ModuleLoader__.load({
               : 'running'
             const progress = clamp(num(job.progress, 0), 0, 1)
             updateJob({ status, progress, error: str(job.error) || null })
+            // v1.2.4: ComfyUI randomized numeric params — show the value that was
+            // actually drawn once the run settles, so the number next to the
+            // "随机" toggle changes after every generation.
+            if (status === 'done' && isObj(job.randomValues)) {
+              const randomValues = job.randomValues
+              const currentWorkflowId =
+                str(paramsRef.current.workflowId) || comfyWorkflowIdOf(paramsRef.current.model)
+              const jobWorkflowId = str(job.workflowId)
+              if (!jobWorkflowId || !currentWorkflowId || jobWorkflowId === currentWorkflowId) {
+                setParams((previous) => ({
+                  ...previous,
+                  workflowParams: {
+                    ...(isObj(previous.workflowParams) ? previous.workflowParams : {}),
+                    ...randomValues,
+                  },
+                }))
+              }
+            }
             if (status === 'done' || status === 'error' || status === 'cancelled') {
               deadJobIdsRef.current.add(jobId)
               settleJob(status, progress, str(job.error) || null)

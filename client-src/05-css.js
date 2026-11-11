@@ -351,6 +351,8 @@
 .iw-param-select{max-width:170px;height:26px;font-size:11.5px}
 .iw-param-select .iw-select{max-width:170px;height:26px;font-size:11.5px}
 .iw-param-check{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--dsw-alias-label-secondary);cursor:pointer;white-space:nowrap}
+.iw-param-random{font-size:10.5px;gap:3px;margin-left:1px;opacity:.92}
+.iw-param-random input{width:12px;height:12px;margin:0}
 .iw-comfy-workflow-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--dsw-alias-border-l1)}
 .iw-comfy-workflow-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .iw-comfy-param-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 0}

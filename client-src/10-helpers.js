@@ -133,6 +133,33 @@
       return out
     }
 
+    /** v1.2.4: per-generation randomize flags for numeric workflow params. */
+    function normalizeWorkflowRandomize(raw) {
+      const out = {}
+      if (!isObj(raw)) return out
+      for (const key of Object.keys(raw)) {
+        if (typeof raw[key] === 'boolean') out[key] = raw[key]
+      }
+      return out
+    }
+
+    /**
+     * v1.2.4: the workflow's exposed `batch_size` input (if any). The composer's
+     * 张数 selector is only shown when this exists — otherwise one prompt run
+     * equals one image and a count selector would be misleading.
+     */
+    function workflowBatchSpec(workflow) {
+      const params = workflow && Array.isArray(workflow.params) ? workflow.params : []
+      return (
+        params.find(
+          (spec) =>
+            spec &&
+            spec.inputName === 'batch_size' &&
+            (spec.type === 'int' || spec.type === 'float'),
+        ) || null
+      )
+    }
+
     /** v1.2: one exposed parameter of a saved workflow (no `json`). */
     function normalizeWorkflowParamSpec(raw) {
       const source = isObj(raw) ? raw : {}
@@ -387,6 +414,7 @@
         n: DEFAULT_PARAMS.n,
         workflowId: DEFAULT_PARAMS.workflowId,
         workflowParams: {},
+        workflowRandomize: {},
       }
     }
 
@@ -401,6 +429,7 @@
       // model validation), and the persisted workflow values are sanitized.
       params.workflowId = comfyWorkflowIdOf(source.model) || str(source.workflowId)
       params.workflowParams = normalizeWorkflowParams(source.workflowParams)
+      params.workflowRandomize = normalizeWorkflowRandomize(source.workflowRandomize)
       return params
     }
 
@@ -430,6 +459,23 @@
         }
         result.workflowId = workflowId
         if (workflow && workflow.name) result.displayName = workflow.name
+        // v1.2.4: 张数 is only meaningful when the workflow exposes batch_size.
+        // Other workflows run exactly once per send (one image per run).
+        if (!workflowBatchSpec(workflow)) result.n = 1
+        // v1.2.4: send the effective randomize flag for every declared numeric
+        // param so the composer toggle works without editing the saved workflow.
+        const randomizeSource = normalizeWorkflowRandomize(source.workflowRandomize)
+        const randomize = {}
+        const declaredParams = workflow && Array.isArray(workflow.params) ? workflow.params : []
+        for (const spec of declaredParams) {
+          if (!spec) continue
+          if (spec.inputName === 'batch_size') continue
+          if (spec.type !== 'int' && spec.type !== 'float') continue
+          randomize[spec.key] = Object.prototype.hasOwnProperty.call(randomizeSource, spec.key)
+            ? !!randomizeSource[spec.key]
+            : !!spec.randomize
+        }
+        result.workflowRandomize = randomize
         return result
       }
       if (dialect === DIALECT.xai) {
