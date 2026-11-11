@@ -1,0 +1,64 @@
+{
+  "name": "dsh-image-workbench",
+  "version": "1.2.2",
+  "description": "Conversational AI image workbench for DeepSeek Harness: workspaces and conversations on the left, canvas-style results, third-party image APIs (OpenAI Images / Grok Imagine) and local ComfyUI workflows.",
+  "type": "module",
+  "license": "MIT",
+  "author": "LEAFCHINA",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LEAFCHINA/dsh-image-workbench.git"
+  },
+  "homepage": "https://github.com/LEAFCHINA/dsh-image-workbench#readme",
+  "bugs": {
+    "url": "https://github.com/LEAFCHINA/dsh-image-workbench/issues"
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "image",
+    "image-generation",
+    "comfyui",
+    "openai-images",
+    "xai",
+    "workbench"
+  ],
+  "engines": {
+    "dsh": ">=0.2.2-rc.1"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "client-src",
+    "cordis.patch.yml",
+    "host",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "assets"
+  ],
+  "scripts": {
+    "build:client": "node scripts/build-client.mjs",
+    "check": "node scripts/check.mjs",
+    "prepack": "npm run build:client && npm run check"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

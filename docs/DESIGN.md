@@ -1,0 +1,86 @@
+# Design notes — local ComfyUI workflow mode
+
+This document records the data model and RPC contract of the ComfyUI backend, so
+the client and host halves can evolve independently.
+
+## Data model
+
+Settings gain one field:
+
+```
+comfyBaseUrl: 'http://127.0.0.1:8188'   // '' = not configured
+```
+
+Workflows are stored separately from settings, in `<DATA_DIR>/workflows.json`:
+
+```jsonc
+{
+  "version": 1,
+  "workflows": [
+    {
+      "id": "wf_1a2b3c4d",
+      "name": "SDXL text-to-image",
+      "createdAt": "ISO",
+      "updatedAt": "ISO",
+      "json": { "3": { "class_type": "KSampler", "inputs": { } } },  // API-format workflow
+      "params": [
+        {
+          "key": "p_1",
+          "nodeId": "6",
+          "inputName": "text",
+          "label": "prompt",
+          "type": "text",              // text | int | float | bool | select
+          "options": [],
+          "min": null, "max": null, "step": null,
+          "default": "",
+          "role": "prompt",            // prompt = receives the composer text
+          "randomize": false           // numeric: new random value per run (seeds)
+        }
+      ]
+    }
+  ]
+}
+```
+
+Limits: 50 workflows, 2 MB per workflow JSON, 60 params per workflow.
+
+## RPC operations
+
+| op | params | returns |
+|---|---|---|
+| `comfy.status` | `{}` | `{ ok, baseUrl, version?, devices?, error? }` |
+| `comfy.workflow.list` | `{}` | `{ workflows: [{ id, name, paramCount, params, createdAt, updatedAt }] }` |
+| `comfy.workflow.get` | `{ id }` | `{ workflow: { id, name, json, params, ... } }` |
+| `comfy.workflow.inspect` | `{ json, baseUrl? }` | `{ nodes, outputs, suggestedParams, warnings }` |
+| `comfy.workflow.save` | `{ id?, name, json?, params? }` | `{ workflow }` (no raw json) |
+| `comfy.workflow.delete` | `{ id }` | `{ ok: true }` |
+
+Errors use the existing `ApiError` shape: `{ ok:false, error, code }` with a
+user-readable Chinese message.
+
+## Execution
+
+1. Resolve the workflow by id; validate and coerce `workflowParams` against the
+   param specs (clamp numbers, validate select options, fill defaults).
+2. Deep-copy the stored graph and write the values into `graph[nodeId].inputs`.
+3. For every param with `role: "prompt"`, write the composer prompt text.
+4. For `randomize` numeric params, generate a value first.
+5. `n`: if the workflow exposes `batch_size`, queue once with that value;
+   otherwise queue `n` times.
+6. `POST /prompt` → poll `GET /history/<prompt_id>` (800 ms) → fetch every image
+   in `outputs[*].images` through `GET /view?...` → return bytes.
+7. Cancellation posts the prompt id to `POST /queue { delete: [...] }`.
+
+ComfyUI is local, so these requests bypass the configured proxy. Polling,
+`/prompt` and image downloads all honour the job's `AbortSignal`.
+
+## Client behaviour
+
+- Model value `comfy:<workflowId>`; the dialect resolver maps it to `comfyui`.
+- ComfyUI dialect hides the API-only parameter selectors (size / aspect /
+  resolution / quality) and shows a second, wrapping row of the exposed params.
+- Parameters marked `role: prompt` are not rendered as controls — the composer
+  textarea feeds them.
+- If a workflow has no prompt binding, the composer shows a warning that opens
+  the settings dialog; the workflow editor's `main prompt → node` selector
+  makes the binding explicit.

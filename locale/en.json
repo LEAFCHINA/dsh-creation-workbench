@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "AI image workbench",
+    "description": "Conversational AI image workbench: workspaces and conversations on the left, canvas-style results on the right, with automatic multi-image grouping, reference images, hover actions, image details, and third-party image APIs."
+  }
+}

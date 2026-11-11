@@ -1,0 +1,4 @@
+- insert:
+    - id: image-workbench
+      name: dsh-image-workbench
+      config: {}
