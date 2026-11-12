@@ -117,6 +117,9 @@ function jobView(job) {
   } else if (job.status === 'queued') {
     view.stage = 'queued'
   }
+  // v1.2.7: per-task start time so the UI counts from when THIS task actually
+  // began executing instead of timing every queued task from enqueue.
+  view.startedAt = job.startedAt || null
   if (job.error) {
     view.error = job.error
     if (job.errorCode) view.code = job.errorCode
@@ -482,24 +485,31 @@ async function runJob(job) {
     }
 
     const settings = await store.readSettingsRaw()
-    // CONTRACT 补丁 v1.1 §2/§6: every generation gets the configured timeout,
-    // applied both to the job abort timer and to the provider request layer
-    // (which now keeps the abort listener alive while reading the body).
-    const jobTimeoutMs = normalizeJobTimeoutMs(settings.jobTimeoutMs)
-    job.timeoutMs = jobTimeoutMs
-    timer = setTimeout(() => {
-      job.timedOut = true
-      try {
-        job.controller.abort()
-      } catch {
-        // ignore
-      }
-    }, jobTimeoutMs)
+    // v1.2.7: local ComfyUI jobs have NO overall timeout — a first run can
+    // spend minutes loading a different UNet/LoRA, and the old 300s cap killed
+    // perfectly healthy runs. They are cancelled manually instead.
+    job.dialect = provider.resolveDialect(job.params.model, settings.models)
+    const comfyLocal = job.dialect === 'comfyui'
+    if (comfyLocal) {
+      job.timeoutMs = 0
+    } else {
+      // CONTRACT 补丁 v1.1 §2/§6: API generations keep the configured timeout,
+      // applied both to the job abort timer and to the provider request layer.
+      const jobTimeoutMs = normalizeJobTimeoutMs(settings.jobTimeoutMs)
+      job.timeoutMs = jobTimeoutMs
+      timer = setTimeout(() => {
+        job.timedOut = true
+        try {
+          job.controller.abort()
+        } catch {
+          // ignore
+        }
+      }, jobTimeoutMs)
+    }
 
     // CONTRACT 补丁 v1.2 §2.5: the ComfyUI dialect never resolves the
     // third-party API config (no API key / baseUrl is required for it).
-    job.dialect = provider.resolveDialect(job.params.model, settings.models)
-    const config = job.dialect === 'comfyui' ? null : store.resolveProviderConfig(settings)
+    const config = comfyLocal ? null : store.resolveProviderConfig(settings)
 
     const refs = []
     for (const meta of job.refsMeta) {
@@ -651,6 +661,8 @@ export function watchdogPass() {
   const now = Date.now()
   for (const job of STATE.jobs.values()) {
     if (job.status !== 'running' || job.finalized || !job.startedAt) continue
+    // v1.2.7: 0 = no overall timeout (local ComfyUI jobs).
+    if (!(Number(job.timeoutMs) > 0)) continue
     const timeoutMs = normalizeJobTimeoutMs(job.timeoutMs)
     const startedAt = Date.parse(job.startedAt)
     if (!Number.isFinite(startedAt)) continue

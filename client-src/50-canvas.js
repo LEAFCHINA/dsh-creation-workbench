@@ -112,12 +112,13 @@
      * cleared on unmount (terminal status unmounts the skeleton/group head).
      */
     function RunningElapsed(props) {
-      const timeoutMs = clamp(
-        Math.round(num(props.timeoutMs, DEFAULT_JOB_TIMEOUT_MS)),
-        JOB_TIMEOUT_MIN_MS,
-        JOB_TIMEOUT_MAX_MS,
-      )
-      const timeoutSeconds = Math.round(timeoutMs / 1000)
+      const rawTimeout = num(props.timeoutMs, DEFAULT_JOB_TIMEOUT_MS)
+      const hasLimit = rawTimeout > 0
+      const timeoutSeconds = hasLimit
+        ? Math.round(
+            clamp(Math.round(rawTimeout), JOB_TIMEOUT_MIN_MS, JOB_TIMEOUT_MAX_MS) / 1000,
+          )
+        : 0
       const [now, setNow] = useState(() => Date.now())
       useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -129,18 +130,23 @@
         'span',
         {
           className: cx('iw-elapsed', props.className),
-          title: `已用 ${elapsed} 秒，生成超时上限 ${timeoutSeconds} 秒（可在设置中调整）`,
+          title: hasLimit
+            ? `已用 ${elapsed} 秒，生成超时上限 ${timeoutSeconds} 秒（可在设置中调整）`
+            : `已用 ${elapsed} 秒（本地 ComfyUI 任务不设超时，可手动取消）`,
         },
-        `已用 ${elapsed}s · ${timeoutSeconds}s 超时`,
+        hasLimit ? `已用 ${elapsed}s · ${timeoutSeconds}s 超时` : `已用 ${elapsed}s`,
       )
     }
 
     function SkeletonCard(props) {
-      const { index, count, progressText, onCancel, startedAt, timeoutMs } = props
+      const { index, count, progressText, onCancel, startedAt, timeoutMs, queued } = props
       const showCancel = typeof onCancel === 'function'
       return h(
         'div',
-        { className: 'iw-card iw-card-skel', title: '正在生成' },
+        {
+          className: 'iw-card iw-card-skel',
+          title: queued ? '排队中' : '正在生成',
+        },
         h(
           'div',
           { className: 'iw-thumb iw-skel' },
@@ -148,9 +154,11 @@
             'div',
             { className: 'iw-skel-center' },
             h(Spinner, { size: 16 }),
-            h('span', null, '生成中…'),
+            h('span', null, queued ? '排队中…' : '生成中…'),
             progressText ? h('span', { className: 'iw-skel-pct' }, progressText) : null,
-            startedAt ? h(RunningElapsed, { startedAt, timeoutMs, className: 'iw-skel-elapsed' }) : null,
+            !queued && startedAt
+              ? h(RunningElapsed, { startedAt, timeoutMs, className: 'iw-skel-elapsed' })
+              : null,
           ),
           showCancel
             ? h(
@@ -172,7 +180,15 @@
         h(
           'div',
           { className: 'iw-card-foot' },
-          h('span', { className: 'iw-card-label' }, count > 1 ? `第 ${index + 1}/${count} 张 · 生成中` : '生成中'),
+          h(
+            'span',
+            { className: 'iw-card-label' },
+            count > 1
+              ? `第 ${index + 1}/${count} 张 · ${queued ? '排队中' : '生成中'}`
+              : queued
+                ? '排队中'
+                : '生成中',
+          ),
         ),
       )
     }
@@ -300,6 +316,16 @@
       const count = running ? requested : images.length
       const progress = job ? clamp(num(job.progress, 0), 0, 1) : 0
       const model = (turn.params && turn.params.model) || ''
+      // v1.2.7: a task waiting behind another one shows "排队中" and only starts
+      // its timer when it actually executes (host startedAt); local ComfyUI
+      // tasks have no timeout cap.
+      const queued = running && !!job && (job.status === 'queued' || job.stage === 'queued')
+      const timerStart = job && job.startedAt ? job.startedAt : turn.createdAt
+      const timerTimeout = isComfyModel(model) ? 0 : timeoutMs
+      const queueText =
+        job && typeof job.queuePosition === 'number' && job.queuePosition > 0
+          ? `排队第 ${job.queuePosition} 位`
+          : '排队中'
       const badgeText = running ? `生成中 · ${count} 张` : `批量生成 · ${count} 张`
       const metaParts = []
       if (model) metaParts.push(modelLabel(model, models))
@@ -331,7 +357,15 @@
           h('span', { className: 'iw-group-badge' }, h(Icon, { name: running ? 'spark' : 'image', size: 11 }), badgeText),
           h('span', { className: 'iw-group-prompt', title: turn.prompt }, truncate(turn.prompt, 90)),
           h('span', { className: 'iw-group-meta' }, metaParts.join(' · ')),
-          running ? h(RunningElapsed, { startedAt: turn.createdAt, timeoutMs, className: 'iw-group-elapsed' }) : null,
+          running
+            ? queued
+              ? h('span', { className: 'iw-group-elapsed' }, queueText)
+              : h(RunningElapsed, {
+                  startedAt: timerStart,
+                  timeoutMs: timerTimeout,
+                  className: 'iw-group-elapsed',
+                })
+            : null,
           running
             ? h(
                 'button',
@@ -363,8 +397,9 @@
                   index,
                   count,
                   progressText: runningProgressText,
-                  startedAt: turn.createdAt,
-                  timeoutMs,
+                  startedAt: timerStart,
+                  timeoutMs: timerTimeout,
+                  queued,
                 }),
               )
             : images.map((image, index) =>
@@ -550,6 +585,8 @@
             } else {
               const job = jobByTurn[turn.id] || null
               const cancelJobId = job && job.jobId ? job.jobId : turn.jobId
+              const singleModel = (turn.params && turn.params.model) || ''
+              const singleQueued = !!job && (job.status === 'queued' || job.stage === 'queued')
               addSingle(
                 turn.id,
                 h(
@@ -563,8 +600,9 @@
                       : turn.jobId
                         ? '正在恢复生成进度…'
                         : '等待上游响应…',
-                    startedAt: turn.createdAt,
-                    timeoutMs,
+                    startedAt: job && job.startedAt ? job.startedAt : turn.createdAt,
+                    timeoutMs: isComfyModel(singleModel) ? 0 : timeoutMs,
+                    queued: singleQueued,
                     onCancel: cancelJobId
                       ? () => onCancelJob(cancelJobId)
                       : () => onAbortTurn(turn),

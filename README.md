@@ -24,6 +24,8 @@ ComfyUI workflows in the composer — the exposed node inputs become wrapping co
 - **Reorderable parameter row** — the workflow editor shows a drag-and-drop preview of the composer row; drag the chips (or use ↑↓) to change the order in which the exposed params appear.
 - **Queue-aware progress & cross-session task panel** — ComfyUI runs show their live queue position, and a toolbar 「任务」 panel lists running/queued jobs across all conversations with cancel buttons.
 - **Per-conversation drafts** — unsent composer text is kept per conversation and restored when you switch back.
+- **Per-conversation composer state** — model/workflow, params, randomize flags and 张数 are restored with the conversation, not only the prompt draft.
+- **Local ComfyUI jobs are not subject to the 300 s API timeout** — they run until done or cancelled; queued tasks show their queue position and only running tasks count elapsed time.
 - **Prompt binding** — one exposed text input is explicitly bound to the composer, so the prompt you type always reaches the workflow. Unbound workflows show a clickable warning instead of silently dropping the text.
 - **Multi-image, cancel/timeout, retry, image detail view**.
 - **Local files** — configurable image directory, save-as, open folder, copy path.

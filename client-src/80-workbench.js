@@ -91,7 +91,17 @@
               { className: 'iw-task-list' },
               items.map((job) => {
                 const name = str(job.displayName) || str(job.model) || '生成任务'
-                const statusText = jobProgressText(job)
+                const queued = job.status === 'queued' || job.stage === 'queued'
+                const baseStatus = jobProgressText(job)
+                const startedAt = Date.parse(str(job.startedAt))
+                const elapsed =
+                  !queued && Number.isFinite(startedAt)
+                    ? Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+                    : 0
+                const statusText =
+                  !queued && elapsed > 0 && job.status === 'running'
+                    ? `${baseStatus} · 已用 ${elapsed}s`
+                    : baseStatus
                 const pct = Math.round(clamp(num(job.progress, 0), 0, 1) * 100)
                 return h(
                   'div',
@@ -209,6 +219,14 @@
       const promptRef = useRef('')
       const draftRef = useRef(
         isObj(storedUiRef.current.drafts) ? { ...storedUiRef.current.drafts } : {},
+      )
+      // v1.2.7: composer state (model/workflow/params/张数) is per conversation.
+      // Switching conversations used to keep the previous conversation's
+      // workflow, so workflow B's settings leaked into workflow A's chat.
+      const convParamsRef = useRef(
+        isObj(storedUiRef.current.conversationParams)
+          ? { ...storedUiRef.current.conversationParams }
+          : {},
       )
       const draftConvRef = useRef('')
       const loadSeqRef = useRef(0)
@@ -516,18 +534,24 @@
         promptRef.current = prompt
       }, [prompt])
 
-      // v1.2.6 (P0-2): keep a draft per conversation. Switching saves the
-      // current text under the previous conversation and restores the target's,
-      // so text never leaks across conversations and survives a page reload.
+      // v1.2.6 (P0-2): keep a draft per conversation. v1.2.7 also keeps the
+      // composer state (model / workflow / params / 张数) per conversation, so
+      // workflow B's selection never leaks into workflow A's chat.
       useEffect(() => {
         const nextId = activeConversationId || ''
         const previousId = draftConvRef.current
         if (previousId && previousId !== nextId) {
           draftRef.current[previousId] = promptRef.current
+          convParamsRef.current[previousId] = paramsRef.current
         }
         draftConvRef.current = nextId
-        if (nextId) setPrompt(str(draftRef.current[nextId]))
-        else setPrompt('')
+        if (nextId) {
+          setPrompt(str(draftRef.current[nextId]))
+          const storedParams = convParamsRef.current[nextId]
+          if (isObj(storedParams)) setParams(normalizeGenParams(storedParams))
+        } else {
+          setPrompt('')
+        }
       }, [activeConversationId])
 
       // v1.2.6 (P0-1): cross-session task list for the toolbar panel. The host
@@ -556,8 +580,18 @@
       useEffect(() => {
         if (boot.status !== 'ready') return undefined
         const timer = setTimeout(() => {
-          if (activeConversationId) draftRef.current[activeConversationId] = prompt
-          saveUiState({ activeWorkspaceId, activeConversationId, expanded, params, drafts: draftRef.current })
+          if (activeConversationId) {
+            draftRef.current[activeConversationId] = prompt
+            convParamsRef.current[activeConversationId] = params
+          }
+          saveUiState({
+            activeWorkspaceId,
+            activeConversationId,
+            expanded,
+            params,
+            drafts: draftRef.current,
+            conversationParams: convParamsRef.current,
+          })
         }, 150)
         return () => clearTimeout(timer)
       }, [boot.status, activeWorkspaceId, activeConversationId, expanded, params, prompt])

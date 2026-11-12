@@ -2,6 +2,20 @@
 
 First public release: **1.2.2**.
 
+## 1.2.7
+
+- **Local ComfyUI jobs no longer hit the 300 s generation timeout.** A first run
+  that loads a different UNet/LoRA can take minutes; local workflow jobs now run
+  without an overall timeout (cancel them from the canvas or the task panel).
+  Third-party API jobs keep the configurable timeout.
+- **Composer state is per conversation**, not just the prompt: model / workflow,
+  exposed params, randomize flags and 张数 are saved and restored when switching
+  conversations, so workflow B can no longer leak into workflow A's chat.
+- **Per-task timers.** A task waiting behind another shows “排队中” (queue
+  position) instead of counting up from enqueue; running tasks count from their
+  own start time, and the task panel shows each running task's elapsed time.
+- Local ComfyUI runs no longer display a “300 s 超时” cap in the elapsed label.
+
 ## 1.2.6
 
 - **Queue-aware progress for ComfyUI runs.** The host now probes ComfyUI's

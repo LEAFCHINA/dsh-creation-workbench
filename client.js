@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-image-workbench'
-    const BUILD = '2026-11-12-client-m2-24'
+    const BUILD = '2026-11-12-client-m2-25'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.image-workbench.v1.ui'
 
@@ -2547,12 +2547,13 @@ window.__ModuleLoader__.load({
      * cleared on unmount (terminal status unmounts the skeleton/group head).
      */
     function RunningElapsed(props) {
-      const timeoutMs = clamp(
-        Math.round(num(props.timeoutMs, DEFAULT_JOB_TIMEOUT_MS)),
-        JOB_TIMEOUT_MIN_MS,
-        JOB_TIMEOUT_MAX_MS,
-      )
-      const timeoutSeconds = Math.round(timeoutMs / 1000)
+      const rawTimeout = num(props.timeoutMs, DEFAULT_JOB_TIMEOUT_MS)
+      const hasLimit = rawTimeout > 0
+      const timeoutSeconds = hasLimit
+        ? Math.round(
+            clamp(Math.round(rawTimeout), JOB_TIMEOUT_MIN_MS, JOB_TIMEOUT_MAX_MS) / 1000,
+          )
+        : 0
       const [now, setNow] = useState(() => Date.now())
       useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -2564,18 +2565,23 @@ window.__ModuleLoader__.load({
         'span',
         {
           className: cx('iw-elapsed', props.className),
-          title: `已用 ${elapsed} 秒，生成超时上限 ${timeoutSeconds} 秒（可在设置中调整）`,
+          title: hasLimit
+            ? `已用 ${elapsed} 秒，生成超时上限 ${timeoutSeconds} 秒（可在设置中调整）`
+            : `已用 ${elapsed} 秒（本地 ComfyUI 任务不设超时，可手动取消）`,
         },
-        `已用 ${elapsed}s · ${timeoutSeconds}s 超时`,
+        hasLimit ? `已用 ${elapsed}s · ${timeoutSeconds}s 超时` : `已用 ${elapsed}s`,
       )
     }
 
     function SkeletonCard(props) {
-      const { index, count, progressText, onCancel, startedAt, timeoutMs } = props
+      const { index, count, progressText, onCancel, startedAt, timeoutMs, queued } = props
       const showCancel = typeof onCancel === 'function'
       return h(
         'div',
-        { className: 'iw-card iw-card-skel', title: '正在生成' },
+        {
+          className: 'iw-card iw-card-skel',
+          title: queued ? '排队中' : '正在生成',
+        },
         h(
           'div',
           { className: 'iw-thumb iw-skel' },
@@ -2583,9 +2589,11 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'iw-skel-center' },
             h(Spinner, { size: 16 }),
-            h('span', null, '生成中…'),
+            h('span', null, queued ? '排队中…' : '生成中…'),
             progressText ? h('span', { className: 'iw-skel-pct' }, progressText) : null,
-            startedAt ? h(RunningElapsed, { startedAt, timeoutMs, className: 'iw-skel-elapsed' }) : null,
+            !queued && startedAt
+              ? h(RunningElapsed, { startedAt, timeoutMs, className: 'iw-skel-elapsed' })
+              : null,
           ),
           showCancel
             ? h(
@@ -2607,7 +2615,15 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'iw-card-foot' },
-          h('span', { className: 'iw-card-label' }, count > 1 ? `第 ${index + 1}/${count} 张 · 生成中` : '生成中'),
+          h(
+            'span',
+            { className: 'iw-card-label' },
+            count > 1
+              ? `第 ${index + 1}/${count} 张 · ${queued ? '排队中' : '生成中'}`
+              : queued
+                ? '排队中'
+                : '生成中',
+          ),
         ),
       )
     }
@@ -2735,6 +2751,16 @@ window.__ModuleLoader__.load({
       const count = running ? requested : images.length
       const progress = job ? clamp(num(job.progress, 0), 0, 1) : 0
       const model = (turn.params && turn.params.model) || ''
+      // v1.2.7: a task waiting behind another one shows "排队中" and only starts
+      // its timer when it actually executes (host startedAt); local ComfyUI
+      // tasks have no timeout cap.
+      const queued = running && !!job && (job.status === 'queued' || job.stage === 'queued')
+      const timerStart = job && job.startedAt ? job.startedAt : turn.createdAt
+      const timerTimeout = isComfyModel(model) ? 0 : timeoutMs
+      const queueText =
+        job && typeof job.queuePosition === 'number' && job.queuePosition > 0
+          ? `排队第 ${job.queuePosition} 位`
+          : '排队中'
       const badgeText = running ? `生成中 · ${count} 张` : `批量生成 · ${count} 张`
       const metaParts = []
       if (model) metaParts.push(modelLabel(model, models))
@@ -2766,7 +2792,15 @@ window.__ModuleLoader__.load({
           h('span', { className: 'iw-group-badge' }, h(Icon, { name: running ? 'spark' : 'image', size: 11 }), badgeText),
           h('span', { className: 'iw-group-prompt', title: turn.prompt }, truncate(turn.prompt, 90)),
           h('span', { className: 'iw-group-meta' }, metaParts.join(' · ')),
-          running ? h(RunningElapsed, { startedAt: turn.createdAt, timeoutMs, className: 'iw-group-elapsed' }) : null,
+          running
+            ? queued
+              ? h('span', { className: 'iw-group-elapsed' }, queueText)
+              : h(RunningElapsed, {
+                  startedAt: timerStart,
+                  timeoutMs: timerTimeout,
+                  className: 'iw-group-elapsed',
+                })
+            : null,
           running
             ? h(
                 'button',
@@ -2798,8 +2832,9 @@ window.__ModuleLoader__.load({
                   index,
                   count,
                   progressText: runningProgressText,
-                  startedAt: turn.createdAt,
-                  timeoutMs,
+                  startedAt: timerStart,
+                  timeoutMs: timerTimeout,
+                  queued,
                 }),
               )
             : images.map((image, index) =>
@@ -2985,6 +3020,8 @@ window.__ModuleLoader__.load({
             } else {
               const job = jobByTurn[turn.id] || null
               const cancelJobId = job && job.jobId ? job.jobId : turn.jobId
+              const singleModel = (turn.params && turn.params.model) || ''
+              const singleQueued = !!job && (job.status === 'queued' || job.stage === 'queued')
               addSingle(
                 turn.id,
                 h(
@@ -2998,8 +3035,9 @@ window.__ModuleLoader__.load({
                       : turn.jobId
                         ? '正在恢复生成进度…'
                         : '等待上游响应…',
-                    startedAt: turn.createdAt,
-                    timeoutMs,
+                    startedAt: job && job.startedAt ? job.startedAt : turn.createdAt,
+                    timeoutMs: isComfyModel(singleModel) ? 0 : timeoutMs,
+                    queued: singleQueued,
                     onCancel: cancelJobId
                       ? () => onCancelJob(cancelJobId)
                       : () => onAbortTurn(turn),
@@ -7387,7 +7425,17 @@ window.__ModuleLoader__.load({
               { className: 'iw-task-list' },
               items.map((job) => {
                 const name = str(job.displayName) || str(job.model) || '生成任务'
-                const statusText = jobProgressText(job)
+                const queued = job.status === 'queued' || job.stage === 'queued'
+                const baseStatus = jobProgressText(job)
+                const startedAt = Date.parse(str(job.startedAt))
+                const elapsed =
+                  !queued && Number.isFinite(startedAt)
+                    ? Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+                    : 0
+                const statusText =
+                  !queued && elapsed > 0 && job.status === 'running'
+                    ? `${baseStatus} · 已用 ${elapsed}s`
+                    : baseStatus
                 const pct = Math.round(clamp(num(job.progress, 0), 0, 1) * 100)
                 return h(
                   'div',
@@ -7505,6 +7553,14 @@ window.__ModuleLoader__.load({
       const promptRef = useRef('')
       const draftRef = useRef(
         isObj(storedUiRef.current.drafts) ? { ...storedUiRef.current.drafts } : {},
+      )
+      // v1.2.7: composer state (model/workflow/params/张数) is per conversation.
+      // Switching conversations used to keep the previous conversation's
+      // workflow, so workflow B's settings leaked into workflow A's chat.
+      const convParamsRef = useRef(
+        isObj(storedUiRef.current.conversationParams)
+          ? { ...storedUiRef.current.conversationParams }
+          : {},
       )
       const draftConvRef = useRef('')
       const loadSeqRef = useRef(0)
@@ -7812,18 +7868,24 @@ window.__ModuleLoader__.load({
         promptRef.current = prompt
       }, [prompt])
 
-      // v1.2.6 (P0-2): keep a draft per conversation. Switching saves the
-      // current text under the previous conversation and restores the target's,
-      // so text never leaks across conversations and survives a page reload.
+      // v1.2.6 (P0-2): keep a draft per conversation. v1.2.7 also keeps the
+      // composer state (model / workflow / params / 张数) per conversation, so
+      // workflow B's selection never leaks into workflow A's chat.
       useEffect(() => {
         const nextId = activeConversationId || ''
         const previousId = draftConvRef.current
         if (previousId && previousId !== nextId) {
           draftRef.current[previousId] = promptRef.current
+          convParamsRef.current[previousId] = paramsRef.current
         }
         draftConvRef.current = nextId
-        if (nextId) setPrompt(str(draftRef.current[nextId]))
-        else setPrompt('')
+        if (nextId) {
+          setPrompt(str(draftRef.current[nextId]))
+          const storedParams = convParamsRef.current[nextId]
+          if (isObj(storedParams)) setParams(normalizeGenParams(storedParams))
+        } else {
+          setPrompt('')
+        }
       }, [activeConversationId])
 
       // v1.2.6 (P0-1): cross-session task list for the toolbar panel. The host
@@ -7852,8 +7914,18 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         if (boot.status !== 'ready') return undefined
         const timer = setTimeout(() => {
-          if (activeConversationId) draftRef.current[activeConversationId] = prompt
-          saveUiState({ activeWorkspaceId, activeConversationId, expanded, params, drafts: draftRef.current })
+          if (activeConversationId) {
+            draftRef.current[activeConversationId] = prompt
+            convParamsRef.current[activeConversationId] = params
+          }
+          saveUiState({
+            activeWorkspaceId,
+            activeConversationId,
+            expanded,
+            params,
+            drafts: draftRef.current,
+            conversationParams: convParamsRef.current,
+          })
         }, 150)
         return () => clearTimeout(timer)
       }, [boot.status, activeWorkspaceId, activeConversationId, expanded, params, prompt])

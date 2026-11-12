@@ -91,6 +91,17 @@ ComfyUI is local, so these requests bypass the configured proxy. Polling,
   `workspaceId`, `conversationId`, `displayName`, `prompt` preview), powering
   the toolbar task panel.
 
+## Timeouts and timers (v1.2.7)
+
+- API dialect jobs use `settings.jobTimeoutMs` (default 300 s). Local ComfyUI
+  jobs set `job.timeoutMs = 0` → no overall abort timer, and the watchdog skips
+  them; they end only on completion, cancellation or an upstream error.
+- `job.get.startedAt` is the moment the job actually began executing (not the
+  enqueue time). The canvas and the task panel use it so queued tasks render
+  “排队中” and only running tasks count elapsed time.
+- The composer snapshot (model/workflow/params/randomize/张数) is stored per
+  conversation in localStorage (`conversationParams`) and restored on switch.
+
 ## Client behaviour
 
 - The `comfy:<workflowId>` prefix in `params.model` is authoritative; a stale
