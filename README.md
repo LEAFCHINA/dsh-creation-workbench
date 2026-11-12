@@ -79,6 +79,14 @@ To upgrade an existing install, remove the old copy first if the profile reports
 - Requests go only to the image API you configured or to your local ComfyUI.
 - The local proxy setting applies to this plugin's API requests only.
 
+## Credits / 致谢
+
+This plugin builds on the original **AI 生图工作台 1.1.0** by **火焱** — the workspace/conversation UI, the canvas layout, the third-party image-API backend and the local-proxy onboarding all originate from that version. The ComfyUI workflow mode, the workflow parameter editor and the fixes described above were added on top of it.
+
+![火焱](assets/credit-huoyan.png)
+
+本插件基于 **火焱** 的「AI 生图工作台 1.1.0」初始版本二次开发：工作区 / 会话界面、画布式排列、第三方生图 API 接入与本地代理引导均源自该版本；ComfyUI 工作流模式、参数编辑与后续修复是在此基础上的扩展。感谢原作者的早期实现。
+
 ## Development
 
 The client half is a plain classic script assembled from fragments:
