@@ -30,7 +30,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-12-host-21'
+export const HOST_BUILD = '2026-11-12-host-22'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
