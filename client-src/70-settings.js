@@ -1266,7 +1266,7 @@
           h(
             'span',
             null,
-            'API Key 以明文保存在本机 <DSH_HOME>/dsh-image-workbench/settings.json，仅在本地使用，不会上传、不写入请求日志。',
+            'API Key 以明文保存在本机 <DSH_HOME>/dsh-creation-workbench/settings.json，仅在本地使用，不会上传、不写入请求日志。',
           ),
         ),
         comfyEditor

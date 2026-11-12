@@ -3,7 +3,7 @@
  *
  * Entry contract (do not change without updating index.js):
  *   export async function handle(req, res, env)
- *     env = { ctx, prefix: '/dsh-image-workbench/', hostBuild, log }
+ *     env = { ctx, prefix: '/dsh-creation-workbench/', hostBuild, log }
  *
  * Routes (registered by index.js as exact paths):
  *   GET  <prefix>ping   -> { ok:true, data:{ build, hostBuild, dataDir, at } }
@@ -30,7 +30,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-12-host-22'
+export const HOST_BUILD = '2026-11-12-host-23'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -635,7 +635,7 @@ export async function handle(req, res, env) {
     }
 
     const url = new URL(req.url || '/', 'http://localhost')
-    const prefix = env.prefix || '/dsh-image-workbench/'
+    const prefix = env.prefix || '/dsh-creation-workbench/'
     const sub = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) : url.pathname.replace(/^\/+/, '')
 
     if (sub === 'ping') {

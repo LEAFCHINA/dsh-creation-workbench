@@ -847,7 +847,9 @@
 
     function loadUiState() {
       try {
-        const raw = window.localStorage.getItem(UI_STORAGE_KEY)
+        const raw =
+          window.localStorage.getItem(UI_STORAGE_KEY) ||
+          window.localStorage.getItem(LEGACY_UI_STORAGE_KEY)
         if (!raw) return {}
         const parsed = JSON.parse(raw)
         return isObj(parsed) ? parsed : {}

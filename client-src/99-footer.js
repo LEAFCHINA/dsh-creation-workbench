@@ -40,9 +40,9 @@
         ctx.slots.register(
           {
             name: SLOTS.sidebar,
-            id: 'image-workbench',
+            id: 'creation-workbench',
             order: 26,
-            label: () => 'AI 生图工作台',
+            label: () => 'AI 创作工作台',
           },
           StudioIcon,
         ),
@@ -52,7 +52,7 @@
         ctx.slots.register(
           {
             name: SLOTS.main,
-            key: 'image-workbench',
+            key: 'creation-workbench',
           },
           PanelRoot,
         ),
@@ -62,7 +62,7 @@
     }
 
     return {
-      name: 'dsh-image-workbench-client',
+      name: 'dsh-creation-workbench-client',
       inject: ['slots', 'locale'],
       apply(ctx) {
         try {

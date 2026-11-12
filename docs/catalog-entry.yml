@@ -1,16 +1,16 @@
 # Catalog entry for awesome-dsh-plugin
 # Open a PR to https://github.com/awesome-dsh-plugin/awesome-dsh-plugin adding
 # exactly one file at:
-#   data/plugins/LEAFCHINA__dsh-image-workbench.yml
+#   data/plugins/LEAFCHINA__dsh-creation-workbench.yml
 # with the content below (already filled in for LEAFCHINA).
 #
 # Requirements: package.json declares dsh.bundle, repo is at least 1 day old,
 # the repo has the `dsh-plugin` topic, description is accurate and factual.
 
-url: https://github.com/LEAFCHINA/dsh-image-workbench
-name: LEAFCHINA/dsh-image-workbench
+url: https://github.com/LEAFCHINA/dsh-creation-workbench
+name: LEAFCHINA/dsh-creation-workbench
 category: ui
 description:
-  en: Conversational AI image workbench with workspaces, canvas results, third-party image APIs, and importable local ComfyUI workflows whose node inputs become composer controls.
-  zh: 对话式 AI 生图工作台：工作区与画布，支持第三方生图 API，并可导入本机 ComfyUI 工作流、把节点输入暴露成对话框参数。
-icon: https://raw.githubusercontent.com/LEAFCHINA/dsh-image-workbench/main/assets/icon-180.png
+  en: Creation workbench with workspaces, canvas results, third-party image APIs, and importable local ComfyUI workflows whose node inputs become composer controls. Image generation today; image editing and video generation are planned.
+  zh: 创作工作台：工作区与画布，支持第三方生图 API，并可导入本机 ComfyUI 工作流、把节点输入暴露成对话框参数；目前已支持生图，图片编辑与视频生成在规划中。
+icon: https://raw.githubusercontent.com/LEAFCHINA/dsh-creation-workbench/main/assets/icon-180.png

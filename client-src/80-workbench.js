@@ -1696,7 +1696,7 @@
               { className: 'iw-boot' },
               h('div', { className: 'iw-boot-card' },
                 h('div', { className: 'iw-boot-icon' }, h(StudioIcon, { size: 30 })),
-                h('div', { className: 'iw-boot-title' }, 'AI 生图工作台'),
+                h('div', { className: 'iw-boot-title' }, 'AI 创作工作台'),
                 h('div', { className: 'iw-boot-row' }, h(Spinner, { size: 15 }), h('span', null, '正在连接插件后端…'))),
             )
           : boot.status === 'error'

@@ -1,4 +1,4 @@
 - insert:
-    - id: image-workbench
-      name: dsh-image-workbench
+    - id: creation-workbench
+      name: dsh-creation-workbench
       config: {}

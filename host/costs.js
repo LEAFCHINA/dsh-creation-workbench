@@ -2,7 +2,7 @@
  * Cost ledger + stats aggregation (CONTRACT.md 补丁 v1.4 §A4/§A5, v1.8 分级定价).
  *
  * Every terminal generation job appends one JSONL row to
- * `<DSH_HOME>/dsh-image-workbench/logs/costs.jsonl`:
+ * `<DSH_HOME>/dsh-creation-workbench/logs/costs.jsonl`:
  *   { at, model, dialect, status, n, images, cost, tier, workspaceId, conversationId, turnId }
  * `cost` is only charged for status==='done'. GPT image models are priced per
  * output tier (1K/2K/4K) using the actual generated image dimensions.

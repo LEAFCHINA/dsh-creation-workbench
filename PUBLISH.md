@@ -19,12 +19,12 @@ Get-ChildItem -Recurse -File -Include *.json,*.md,*.yml,LICENSE | ForEach-Object
 ## 1\. 建仓库并推送
 
 ```powershell
-cd "C:\path\to\dsh-image-workbench-github"
+cd "C:\path\to\dsh-creation-workbench-github"
 git init
 git add -A
 git commit -m "feat: DSH AI image workbench v1.2.2 (API + local ComfyUI workflows)"
 git branch -M main
-git remote add origin https://github.com/LEAFCHINA/dsh-image-workbench.git
+git remote add origin https://github.com/LEAFCHINA/dsh-creation-workbench.git
 git push -u origin main
 ```
 
@@ -38,14 +38,14 @@ git push -u origin main
 别人可以直接装：
 
 ```sh
-dsh plugin --profile web add github:LEAFCHINA/dsh-image-workbench
+dsh plugin --profile web add github:LEAFCHINA/dsh-creation-workbench
 ```
 
 收录时市场会按 `github:owner/repo` 生成安装命令。
 
 ### B. 同时发 npm（推荐，安装更快、可版本更新）
 
-`dsh-image-workbench` 这个包名当前**未被占用**（已查 npm registry 返回 404）。
+`dsh-creation-workbench` 这个包名当前**未被占用**（已查 npm registry 返回 404）。
 
 ```powershell
 npm login
@@ -56,7 +56,7 @@ npm publish --access public
 之后别人可以：
 
 ```sh
-dsh plugin --profile web add dsh-image-workbench
+dsh plugin --profile web add dsh-creation-workbench
 ```
 
 > 注意：`package.json` 的 `files` 已包含构建产物 `client.js`、源码 `client-src/`、`host/`、`cordis.patch.yml` 等，安装不需要在目标机编译。
@@ -66,7 +66,7 @@ dsh plugin --profile web add dsh-image-workbench
 市场是仓库 `awesome-dsh-plugin/awesome-dsh-plugin` 的精选列表，**一个插件一个 YAML 文件**。
 
 1. Fork 该仓库；
-2. 新建文件 `data/plugins/LEAFCHINA__dsh-image-workbench.yml`，内容用 [docs/catalog-entry.yml](catalog-entry.yml)；
+2. 新建文件 `data/plugins/LEAFCHINA__dsh-creation-workbench.yml`，内容用 [docs/catalog-entry.yml](catalog-entry.yml)；
 3. 提 PR（不要改 README，README 由脚本生成）。
 
 收录要求核对（本仓库已满足）：

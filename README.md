@@ -1,11 +1,11 @@
-# AI 生图工作台 · dsh-image-workbench
+# AI 创作工作台 · dsh-creation-workbench
 
-![check](https://github.com/LEAFCHINA/dsh-image-workbench/actions/workflows/check.yml/badge.svg)
+![check](https://github.com/LEAFCHINA/dsh-creation-workbench/actions/workflows/check.yml/badge.svg)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
-A conversational image workbench plugin for [DeepSeek Harness](https://github.com/deepseek-ai) (DSH): workspaces and conversations on the left, a canvas-style result grid on the right — powered either by a third-party image API or by your **local ComfyUI workflows**.
+A personal creation workbench plugin for [DeepSeek Harness](https://github.com/deepseek-ai) (DSH): workspaces and conversations on the left, a canvas-style result grid on the right — powered either by a third-party image API or by your **local ComfyUI workflows**. Image generation is available today; image editing and video generation are the next steps on the roadmap.
 
-DeepSeek Harness 的对话式生图插件：左侧工作区 / 会话，右侧画布式排版；支持第三方生图 API，也可以直接调用**本机 ComfyUI 工作流**。
+DeepSeek Harness 的个人创作工作台：左侧工作区 / 会话，右侧画布式排版；支持第三方生图 API，也可以直接调用**本机 ComfyUI 工作流**。当前提供生图能力，图片编辑与视频生成在规划中。
 
 ![ComfyUI workflow parameter editor](assets/editor.png)
 
@@ -46,10 +46,10 @@ From the **Plugin Market** (once listed), or directly:
 
 ```sh
 # npm
-dsh plugin --profile web add dsh-image-workbench
+dsh plugin --profile web add dsh-creation-workbench
 
 # GitHub
-dsh plugin --profile web add github:LEAFCHINA/dsh-image-workbench
+dsh plugin --profile web add github:LEAFCHINA/dsh-creation-workbench
 ```
 
 Or in DSH: **Plugins → Add plugin → Install**, pasting the package name, the GitHub spec, or the absolute path of the `.tgz` release.
@@ -58,7 +58,7 @@ To upgrade an existing install, remove the old copy first if the profile reports
 
 ## Quick start
 
-1. Open **AI 生图工作台** in the left sidebar → **⚙ Settings**.
+1. Open **AI 创作工作台** in the left sidebar → **⚙ Settings**.
 2. Pick a backend:
 
    **Third-party API** — fill the API base URL (up to `/v1`) and key, then pick models (or pull them from the host). Configure a proxy if your provider needs one.
@@ -70,26 +70,33 @@ To upgrade an existing install, remove the old copy first if the profile reports
 3. In the composer choose the model or **工作流 · name**, write the prompt, and send.
 4. Generated images are saved under the configured directory and shown on the canvas; open one for details, save-as, or reveal in Explorer.
 
-### ComfyUI limits (v1)
+### ComfyUI limits (v2.0)
 
-- Reference images and the inpainting mask are **not** supported in workflow mode.
-- Video workflows are not supported.
+- Reference images and the inpainting mask are **not** supported in workflow mode yet.
+- Video workflows are not supported yet.
 - `n images`: if the workflow exposes a `batch_size` input it is queued once with that batch size; otherwise the workflow is queued `n` times.
+
+## Roadmap
+
+- **Image editing** — ComfyUI `LoadImage` inputs exposed as reference slots (img2img / inpaint workflows), plus a unified edit entry from the image detail view.
+- **Video generation** — video assets on the canvas (poster + player), duration/fps/audio params, ComfyUI video workflows and video-capable API dialects.
+- **Media library** — thumbnails, search and batch operations across workspaces.
 
 ## Data and privacy
 
-- Data directory: `%USERPROFILE%\.dsh\dsh-image-workbench\` (`settings.json`, `workflows.json`, `images/`, `logs/`).
+- Data directory: `%USERPROFILE%\.dsh\dsh-creation-workbench\` (`settings.json`, `workflows.json`, `images/`, `logs/`).
+- **Renamed in v2.0.0** (from `dsh-image-workbench`): on first start the old data directory (`%USERPROFILE%\.dsh\dsh-image-workbench`) is **copied** to the new location, so workflows, settings and conversations keep working. The legacy directory is left in place as a backup.
 - The API key is stored **in plain text on your machine only** in `settings.json`; the plugin never uploads it and never logs it.
 - Requests go only to the image API you configured or to your local ComfyUI.
 - The local proxy setting applies to this plugin's API requests only.
 
 ## Credits / 致谢
 
-This plugin builds on the original **AI 生图工作台 1.1.0** by **火焱** — the workspace/conversation UI, the canvas layout, the third-party image-API backend and the local-proxy onboarding all originate from that version. The ComfyUI workflow mode, the workflow parameter editor and the fixes described above were added on top of it.
+This plugin builds on the original **AI 生图工作台 1.1.0** by **火焱** — the workspace/conversation UI, the canvas layout, the third-party image-API backend and the local-proxy onboarding all originate from that version. The ComfyUI workflow mode, the workflow parameter editor and the fixes described above were added on top of it, and the project was renamed to **AI 创作工作台 / dsh-creation-workbench** in v2.0.0 to cover image editing and video as well.
 
 ![火焱](assets/credit-huoyan.png)
 
-本插件基于 **火焱** 的「AI 生图工作台 1.1.0」初始版本二次开发：工作区 / 会话界面、画布式排列、第三方生图 API 接入与本地代理引导均源自该版本；ComfyUI 工作流模式、参数编辑与后续修复是在此基础上的扩展。感谢原作者的早期实现。
+本插件基于 **火焱** 的「AI 生图工作台 1.1.0」初始版本二次开发：工作区 / 会话界面、画布式排列、第三方生图 API 接入与本地代理引导均源自该版本；ComfyUI 工作流模式、参数编辑与后续修复是在此基础上的扩展。v2.0.0 起项目更名为 **AI 创作工作台 / dsh-creation-workbench**，以覆盖图片编辑与视频生成。
 
 ## Development
 
@@ -105,6 +112,7 @@ scripts/check.mjs         # build freshness + syntax + dsh manifest checks
 ```sh
 npm run build:client   # rebuild client.js from client-src/
 npm run check          # verify the repo is consistent
+npm test               # host e2e + regression + client smoke (mock ComfyUI, no DSH needed)
 ```
 
 The host half lives in `host/*.js` and is hot-reloaded by DSH: editing `host/main.js` changes the loaded revision, which re-imports the other host modules on the next request.

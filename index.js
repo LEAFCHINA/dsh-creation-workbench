@@ -13,7 +13,7 @@
 import { stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
-export const API_PREFIX = '/dsh-image-workbench/'
+export const API_PREFIX = '/dsh-creation-workbench/'
 export const HOST_BUILD = '2026-11-11-host-shim-1'
 
 const HOST_ENTRY = new URL('./host/main.js', import.meta.url)
@@ -89,7 +89,7 @@ function makeHandler(ctx) {
 export function apply(ctx) {
   logFn = (message) => {
     try {
-      ctx.logger?.info?.(`[image-workbench] ${message}`)
+      ctx.logger?.info?.(`[creation-workbench] ${message}`)
     } catch {
       // ignore
     }

@@ -1,29 +1,32 @@
 {
-  "name": "dsh-image-workbench",
-  "version": "1.2.7",
-  "description": "Conversational AI image workbench for DeepSeek Harness: workspaces and conversations on the left, canvas-style results, third-party image APIs (OpenAI Images / Grok Imagine) and local ComfyUI workflows.",
+  "name": "dsh-creation-workbench",
+  "version": "2.0.0",
+  "description": "Personal creation workbench for DeepSeek Harness: workspaces and conversations on the left, canvas-style results, third-party image APIs (OpenAI Images / Grok Imagine) and local ComfyUI workflows. Image editing and video generation are on the roadmap.",
   "type": "module",
   "license": "MIT",
   "author": "LEAFCHINA",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LEAFCHINA/dsh-image-workbench.git"
+    "url": "git+https://github.com/LEAFCHINA/dsh-creation-workbench.git"
   },
-  "homepage": "https://github.com/LEAFCHINA/dsh-image-workbench#readme",
+  "homepage": "https://github.com/LEAFCHINA/dsh-creation-workbench#readme",
   "bugs": {
-    "url": "https://github.com/LEAFCHINA/dsh-image-workbench/issues"
+    "url": "https://github.com/LEAFCHINA/dsh-creation-workbench/issues"
   },
   "keywords": [
     "deepseek",
     "harness",
     "dsh",
     "dsh-plugin",
+    "creation",
+    "workbench",
     "image",
     "image-generation",
+    "image-editing",
+    "video",
     "comfyui",
     "openai-images",
-    "xai",
-    "workbench"
+    "xai"
   ],
   "engines": {
     "dsh": ">=0.2.2-rc.1"
@@ -49,7 +52,8 @@
   "scripts": {
     "build:client": "node scripts/build-client.mjs",
     "check": "node scripts/check.mjs",
-    "prepack": "npm run build:client && npm run check"
+    "test": "node test/run-all.mjs",
+    "prepack": "npm run build:client && npm run check && npm test"
   },
   "dsh": {
     "bundle": {

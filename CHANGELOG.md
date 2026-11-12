@@ -2,6 +2,26 @@
 
 First public release: **1.2.2**.
 
+## 2.0.0 — rename to AI 创作工作台 / dsh-creation-workbench
+
+The plugin is now positioned as a personal **creation** workbench (image generation
+today; image editing and video generation next), so package, repository, client
+module id, API prefix and display name were renamed together:
+
+- package / GitHub / npm: `dsh-image-workbench` → **`dsh-creation-workbench`**
+- display name: 「AI 生图工作台」 → **「AI 创作工作台」**
+- client module id + host API prefix: `dsh-image-workbench` → `dsh-creation-workbench`
+- plugin row id in `cordis.patch.yml`: `image-workbench` → `creation-workbench`
+- **data migration**: on first start the old data directory
+  (`~/.dsh/dsh-image-workbench`) is copied to `~/.dsh/dsh-creation-workbench`;
+  the legacy directory is kept, so old absolute image paths keep resolving.
+  Composer drafts / per-conversation params read the old localStorage key once
+  and are then written under the new one.
+- Old GitHub URLs redirect automatically; the npm package name is new (2.0.0),
+  so existing 1.2.x installs must be removed and reinstalled.
+- Tests moved into the repository (`test/`) and now run in CI (`npm test`).
+
+
 ## 1.2.7
 
 - **Local ComfyUI jobs no longer hit the 300 s generation timeout.** A first run
@@ -65,8 +85,8 @@ First public release: **1.2.2**.
 ## 1.2.3
 
 - Fix: the client bundle registered itself under the old module id
-  `@local/dsh-image-workbench` while the package is now named
-  `dsh-image-workbench`. DSH keys client plugins by package name, so the entry
+  `@local/dsh-creation-workbench` while the package is now named
+  `dsh-creation-workbench`. DSH keys client plugins by package name, so the entry
   could not activate at boot and the bundle was executed twice
   (`client-modules: duplicate factory registration`), which aborted the web boot.
   The module id now matches the package name.

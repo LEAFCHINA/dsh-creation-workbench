@@ -85,7 +85,7 @@
           h(
             'div',
             { className: 'iw-brand-text' },
-            h('div', { className: 'iw-brand-title' }, 'AI 生图工作台'),
+            h('div', { className: 'iw-brand-title' }, 'AI 创作工作台'),
             h('div', { className: 'iw-brand-sub' }, '工作区 · 会话 · 画布'),
           ),
         ),

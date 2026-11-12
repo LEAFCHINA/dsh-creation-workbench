@@ -2,7 +2,7 @@
  * Disk store for the AI image workbench host half.
  *
  * Layout (CONTRACT.md §3):
- *   <DSH_HOME>/dsh-image-workbench/
+ *   <DSH_HOME>/dsh-creation-workbench/
  *     settings.json
  *     workspaces.json
  *     data/<wsId>/<convId>.json
@@ -48,8 +48,9 @@ const {
 /* Locations + shared mutable state                                    */
 /* ------------------------------------------------------------------ */
 
-export const PLUGIN_DIR_NAME = 'dsh-image-workbench'
-export const API_PREFIX = '/dsh-image-workbench/'
+export const PLUGIN_DIR_NAME = 'dsh-creation-workbench'
+export const LEGACY_PLUGIN_DIR_NAME = 'dsh-image-workbench'
+export const API_PREFIX = '/dsh-creation-workbench/'
 export const DEFAULT_WORKSPACE_NAME = '默认工作区'
 export const DEFAULT_CONVERSATION_TITLE = '新会话'
 export const AUTOTITLE_MAX = 24
@@ -63,6 +64,32 @@ function resolveDshHome() {
 
 export const DSH_HOME = resolveDshHome()
 export const DATA_DIR = path.join(DSH_HOME, PLUGIN_DIR_NAME)
+const LEGACY_DATA_DIR = path.join(DSH_HOME, LEGACY_PLUGIN_DIR_NAME)
+const MIGRATION_MARKER = path.join(DATA_DIR, '.migrated-from-image-workbench')
+
+/**
+ * v2.0.0 rename migration: the plugin used to store everything under
+ * `dsh-image-workbench`. On first load, copy that directory to the new one so
+ * workflows / settings / conversations / images survive the rename. The copy is
+ * kept (never deleted) because old conversation records may still hold absolute
+ * paths pointing into the legacy directory.
+ */
+async function migrateLegacyData() {
+  try {
+    if (await pathExists(DATA_DIR)) return
+    if (!(await pathExists(LEGACY_DATA_DIR))) return
+    await fs.cp(LEGACY_DATA_DIR, DATA_DIR, { recursive: true, force: false, errorOnExist: false })
+    await fs.writeFile(
+      MIGRATION_MARKER,
+      `migrated from ${LEGACY_DATA_DIR} at ${new Date().toISOString()}\n`,
+      'utf8',
+    )
+  } catch {
+    // Data migration must never prevent the plugin from starting.
+  }
+}
+
+await migrateLegacyData()
 
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json')
 const WORKSPACES_FILE = path.join(DATA_DIR, 'workspaces.json')

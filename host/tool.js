@@ -206,7 +206,7 @@ function makeExecute(scope, hostCtx) {
       return {
         ok: false,
         model: '',
-        message: '尚未配置生图模型。请先在「AI 生图工作台 → API 设置」中添加模型后再使用本工具。',
+        message: '尚未配置生图模型。请先在「AI 创作工作台 → API 设置」中添加模型后再使用本工具。',
         error: '尚未配置生图模型',
       }
     }
@@ -387,7 +387,7 @@ export function buildDefinition(scope, hostCtx) {
   return {
     name: TOOL_NAME,
     description:
-      '根据文本提示词生成图片（复用 AI 生图工作台已配置的第三方生图 API、方言、代理与超时设置）。' +
+      '根据文本提示词生成图片（复用 AI 创作工作台已配置的第三方生图 API、方言、代理与超时设置）。' +
       '返回生成张数、尺寸、估算成本与图片的绝对路径；当当前模型支持视觉输入时同时返回图片内容块。',
     parameters: PARAMETERS,
     output: {
