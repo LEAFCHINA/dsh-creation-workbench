@@ -144,6 +144,26 @@
     }
 
     /**
+     * v1.2.5: remembered per-workflow composer state. Switching workflows used
+     * to carry the previous workflow's values/randomize/n over because the
+     * param keys (p_1, p_2, …) are the same in every workflow.
+     */
+    function normalizeWorkflowCache(raw) {
+      const out = {}
+      if (!isObj(raw)) return out
+      for (const key of Object.keys(raw)) {
+        const entry = raw[key]
+        if (!isObj(entry)) continue
+        out[key] = {
+          values: normalizeWorkflowParams(entry.values),
+          randomize: normalizeWorkflowRandomize(entry.randomize),
+          n: clamp(Math.round(num(entry.n, 1)), 1, 10),
+        }
+      }
+      return out
+    }
+
+    /**
      * v1.2.4: the workflow's exposed `batch_size` input (if any). The composer's
      * 张数 selector is only shown when this exists — otherwise one prompt run
      * equals one image and a count selector would be misleading.
@@ -356,6 +376,26 @@
           else if (!str(opts.id) && suggestedSpec) selected[matchKey] = true
         }
       }
+      // v1.2.5: composer display order for the selected params. Editing keeps
+      // the saved order; a fresh import follows the inspector's suggestion
+      // order, then node order. The editor lets the user drag it around.
+      const order = []
+      const seenOrder = new Set()
+      const pushOrder = (key) => {
+        if (!isObj(templates[key]) || !selected[key] || seenOrder.has(key)) return
+        seenOrder.add(key)
+        order.push(key)
+      }
+      for (const spec of existing) {
+        if (isObj(spec)) pushOrder(`${str(spec.nodeId)}.${str(spec.inputName)}`)
+      }
+      for (const spec of suggested) {
+        if (isObj(spec)) pushOrder(`${str(spec.nodeId)}.${str(spec.inputName)}`)
+      }
+      for (const node of nodes) {
+        for (const input of node.inputs) pushOrder(`${node.nodeId}.${input.inputName}`)
+      }
+
       return {
         id: str(opts.id),
         name: str(opts.name),
@@ -368,6 +408,7 @@
         suggestedParams: suggested,
         selected,
         templates,
+        order,
         isNew: !str(opts.id),
       }
     }
@@ -415,6 +456,7 @@
         workflowId: DEFAULT_PARAMS.workflowId,
         workflowParams: {},
         workflowRandomize: {},
+        workflowCache: {},
       }
     }
 
@@ -430,6 +472,7 @@
       params.workflowId = comfyWorkflowIdOf(source.model) || str(source.workflowId)
       params.workflowParams = normalizeWorkflowParams(source.workflowParams)
       params.workflowRandomize = normalizeWorkflowRandomize(source.workflowRandomize)
+      params.workflowCache = normalizeWorkflowCache(source.workflowCache)
       return params
     }
 

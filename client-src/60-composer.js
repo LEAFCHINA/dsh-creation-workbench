@@ -564,17 +564,44 @@
                         // v1.2: entering workflow mode drops reference images
                         // (unsupported) and the previous workflow's values.
                         if (nextWorkflowId && typeof onClearRefs === 'function') onClearRefs()
-                        // v1.2.4: a workflow without batch_size runs once per
-                        // send, so reset the stale 张数 value to 1.
                         const nextWorkflow = findWorkflowById(workflowList, nextWorkflowId)
                         const nextHasBatch = !!workflowBatchSpec(nextWorkflow)
+                        // v1.2.5: remember the current workflow's state and restore
+                        // the target workflow's own state. Param keys (p_1, p_2, …)
+                        // are identical in every workflow, so carrying values over
+                        // silently ran the new workflow with the old one's settings
+                        // (wrong seed/size, and a "张数" that belonged to another
+                        // workflow). A workflow without batch_size always runs once.
+                        const cache = isObj(params.workflowCache) ? { ...params.workflowCache } : {}
+                        const previousWorkflowId =
+                          comfyWorkflowIdOf(params.model) || str(params.workflowId)
+                        if (previousWorkflowId) {
+                          cache[previousWorkflowId] = {
+                            values: isObj(params.workflowParams) ? { ...params.workflowParams } : {},
+                            randomize: isObj(params.workflowRandomize)
+                              ? { ...params.workflowRandomize }
+                              : {},
+                            n: params.n,
+                          }
+                        }
+                        const restored =
+                          nextWorkflowId && isObj(cache[nextWorkflowId]) ? cache[nextWorkflowId] : null
+                        const restoredValues =
+                          restored && isObj(restored.values) ? { ...restored.values } : {}
+                        const restoredRandomize =
+                          restored && isObj(restored.randomize) ? { ...restored.randomize } : {}
+                        const restoredN = restored
+                          ? clamp(Math.round(num(restored.n, 1)), 1, maxN)
+                          : 1
                         onParamsChange({
                           ...params,
                           model: value,
                           quality: nextQuality,
-                          n: nextWorkflowId && !nextHasBatch ? 1 : params.n,
+                          n: nextWorkflowId && nextHasBatch ? restoredN : nextWorkflowId ? 1 : params.n,
                           workflowId: nextWorkflowId,
-                          workflowParams: nextWorkflowId ? { ...workflowParamValues } : {},
+                          workflowParams: restoredValues,
+                          workflowRandomize: restoredRandomize,
+                          workflowCache: cache,
                         })
                       },
                       title: '模型',

@@ -1134,11 +1134,12 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
   }
   const rawParams = isPlainObject(params) ? params : {}
   const model = String(rawParams.model || '')
-  const workflowId = typeof rawParams.workflowId === 'string' && rawParams.workflowId.trim()
-    ? rawParams.workflowId.trim()
-    : model.startsWith('comfy:')
-      ? model.slice('comfy:'.length)
-      : ''
+  // v1.2.5: the `comfy:<id>` model prefix wins over a stale workflowId param.
+  const modelWorkflowId = model.startsWith('comfy:') ? model.slice('comfy:'.length) : ''
+  const workflowId = modelWorkflowId ||
+    (typeof rawParams.workflowId === 'string' && rawParams.workflowId.trim()
+      ? rawParams.workflowId.trim()
+      : '')
   if (!isWorkflowId(workflowId)) throw new ApiError('工作流 ID 无效', 'INVALID_REQUEST', 400)
   const workflow = await findWorkflowById(workflowId)
   if (!workflow) throw new ApiError('工作流不存在或已删除', 'INVALID_REQUEST', 400)

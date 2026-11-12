@@ -1362,6 +1362,28 @@
         visibleNodes[0] ||
         null
 
+      // v1.2.5: composer display order of the selected params, editable by
+      // dragging the preview (or with the ↑↓ buttons). Saved params keep this
+      // order, so the composer row renders exactly like the preview.
+      const [order, setOrder] = useState(() => {
+        const fromDraft = Array.isArray(draft.order) ? draft.order : null
+        const keys = fromDraft || Object.keys(isObj(draft.selected) ? draft.selected : {})
+        return keys.filter((key) => isObj(templates[key]) && !!selected[key])
+      })
+      const [dragIndex, setDragIndex] = useState(-1)
+      const [dropIndex, setDropIndex] = useState(-1)
+      const selectedOrder = order.filter((key) => isObj(templates[key]) && !!selected[key])
+      const moveOrder = (from, to) => {
+        setOrder((previous) => {
+          if (from === to || from < 0 || to < 0) return previous
+          if (from >= previous.length || to >= previous.length) return previous
+          const next = previous.slice()
+          const [item] = next.splice(from, 1)
+          next.splice(to, 0, item)
+          return next
+        })
+      }
+
       // v1.2.2: exactly one exposed text input can be bound to the composer
       // box. The binding is explicit (a selector in the toolbar), so the main
       // prompt always lands in a real workflow input instead of being dropped.
@@ -1396,7 +1418,10 @@
       const bindPrompt = (key) => {
         const nextKey = str(key)
         setPromptBinding(nextKey)
-        if (nextKey) setSelected((previous) => ({ ...previous, [nextKey]: true }))
+        if (nextKey) {
+          setSelected((previous) => ({ ...previous, [nextKey]: true }))
+          setOrder((previous) => (previous.indexOf(nextKey) >= 0 ? previous : [...previous, nextKey]))
+        }
       }
 
       const selectSuggested = () => {
@@ -1406,13 +1431,18 @@
           return
         }
         const next = { ...selected }
+        const added = []
         for (const spec of suggested) {
           if (!isObj(spec)) continue
           const matchKey = `${str(spec.nodeId)}.${str(spec.inputName)}`
           if (!isObj(templates[matchKey])) continue
+          if (!next[matchKey]) added.push(matchKey)
           next[matchKey] = true
         }
         setSelected(next)
+        if (added.length) {
+          setOrder((previous) => [...previous, ...added.filter((key) => previous.indexOf(key) < 0)])
+        }
         setError('')
       }
 
@@ -1420,10 +1450,17 @@
         const next = {}
         for (const key of Object.keys(selected)) next[key] = false
         setSelected(next)
+        setOrder([])
       }
 
       const toggleParam = (matchKey) => {
+        const turningOn = !selected[matchKey]
         setSelected((previous) => ({ ...previous, [matchKey]: !previous[matchKey] }))
+        if (turningOn) {
+          setOrder((previous) => (previous.indexOf(matchKey) >= 0 ? previous : [...previous, matchKey]))
+        } else {
+          setOrder((previous) => previous.filter((key) => key !== matchKey))
+        }
       }
 
       const updateTemplate = (matchKey, patch) => {
@@ -1457,10 +1494,17 @@
         // always saved (and marked role=prompt) even if it was left unchecked.
         const effectivePromptKey =
           promptBinding && isObj(templates[promptBinding]) ? promptBinding : ''
-        const saveKeys =
-          effectivePromptKey && selectedKeys.indexOf(effectivePromptKey) < 0
-            ? [...selectedKeys, effectivePromptKey]
-            : selectedKeys
+        // v1.2.5: the dragged preview order is the saved order (composer renders
+        // params in that order). Any still-selected key missing from the order
+        // is appended, and the bound prompt input is always included.
+        const ordered = order.filter((key) => isObj(templates[key]) && !!selected[key])
+        for (const key of selectedKeys) {
+          if (ordered.indexOf(key) < 0) ordered.push(key)
+        }
+        if (effectivePromptKey && ordered.indexOf(effectivePromptKey) < 0) {
+          ordered.push(effectivePromptKey)
+        }
+        const saveKeys = ordered
         const params = []
         for (const matchKey of saveKeys) {
           const tpl = isObj(templates[matchKey]) ? templates[matchKey] : {}
@@ -1708,6 +1752,99 @@
         return h(React.Fragment, null, head, ...rows)
       }
 
+      // v1.2.5: preview of the composer param row. Drag to reorder (HTML5 DnD),
+      // with ↑↓ buttons as a keyboard/no-drag fallback; ✕ unchecks the param.
+      const orderTypeLabel = { text: '文本', int: '整数', float: '小数', bool: '开关', select: '选项' }
+      const renderOrderChip = (key, index) => {
+        const tpl = isObj(templates[key]) ? templates[key] : {}
+        const label = str(tpl.label) || str(tpl.inputName) || key
+        const typeLabel = orderTypeLabel[tpl.type] || str(tpl.type) || ''
+        return h(
+          'div',
+          {
+            key,
+            className: cx(
+              'iw-comfy-order-item',
+              dragIndex === index && 'dragging',
+              dropIndex === index && dragIndex !== index && 'drop-target',
+            ),
+            draggable: !busy,
+            title: `${label}（${str(tpl.nodeId)}.${str(tpl.inputName)}）`,
+            onDragStart: (event) => {
+              setDragIndex(index)
+              try {
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData('text/plain', key)
+              } catch {
+                // ignore: drag data is a nicety, the index state is the source
+              }
+            },
+            onDragOver: (event) => {
+              event.preventDefault()
+              if (dropIndex !== index) setDropIndex(index)
+            },
+            onDragLeave: () => {
+              if (dropIndex === index) setDropIndex(-1)
+            },
+            onDrop: (event) => {
+              event.preventDefault()
+              moveOrder(dragIndex, index)
+              setDragIndex(-1)
+              setDropIndex(-1)
+            },
+            onDragEnd: () => {
+              setDragIndex(-1)
+              setDropIndex(-1)
+            },
+          },
+          h('span', { className: 'iw-comfy-order-handle', 'aria-hidden': 'true' }, '⋮⋮'),
+          h('span', { className: 'iw-comfy-order-label' }, label),
+          typeLabel ? h('span', { className: 'iw-comfy-order-type' }, typeLabel) : null,
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'iw-comfy-order-btn',
+              title: '上移',
+              disabled: busy || index === 0,
+              onClick: (event) => {
+                event.stopPropagation()
+                moveOrder(index, index - 1)
+              },
+            },
+            '↑',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'iw-comfy-order-btn',
+              title: '下移',
+              disabled: busy || index >= selectedOrder.length - 1,
+              onClick: (event) => {
+                event.stopPropagation()
+                moveOrder(index, index + 1)
+              },
+            },
+            '↓',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'iw-comfy-order-btn iw-comfy-order-remove',
+              title: '取消勾选',
+              disabled: busy,
+              onClick: (event) => {
+                event.stopPropagation()
+                toggleParam(key)
+              },
+            },
+            '✕',
+          ),
+        )
+      }
+
       return h(
         Modal,
         {
@@ -1807,6 +1944,23 @@
           ),
           h(Btn, { small: true, onClick: clearSelected, disabled: busy }, '清空已勾选'),
           h('span', { className: 'iw-field-hint' }, `已勾选 ${selectedKeys.length} 个参数`),
+        ),
+        h(
+          'div',
+          { className: 'iw-comfy-order' },
+          h(
+            'div',
+            { className: 'iw-comfy-order-head' },
+            h('span', { className: 'iw-comfy-order-title' }, '对话框参数顺序'),
+            h('span', { className: 'iw-field-hint' }, '拖动排序（或点 ↑↓）；保存后对话框按此顺序显示'),
+          ),
+          selectedOrder.length
+            ? h('div', { className: 'iw-comfy-order-list' }, selectedOrder.map(renderOrderChip))
+            : h(
+                'div',
+                { className: 'iw-field-hint' },
+                '勾选参数后会出现在这里，可拖动调整它们在对话框中的显示顺序。',
+              ),
         ),
         nodes.length
           ? h(

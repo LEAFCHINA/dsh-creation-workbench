@@ -81,6 +81,17 @@ ComfyUI is local, so these requests bypass the configured proxy. Polling,
 
 ## Client behaviour
 
+- The `comfy:<workflowId>` prefix in `params.model` is authoritative; a stale
+  `params.workflowId` is ignored (and logged) instead of selecting an older
+  workflow.
+- Each workflow remembers its own composer state (`params.workflowCache`, keyed
+  by workflow id). Switching workflows restores that workflow's values,
+  randomize flags and 张数 instead of carrying the previous workflow's state
+  across — param keys (`p_1`, `p_2`, …) are identical in every workflow.
+- The saved `params` array order is the composer row order. The workflow editor
+  exposes it as a drag-and-drop preview (with ↑↓ fallbacks) and saves the
+  resulting order.
+
 - Model value `comfy:<workflowId>`; the dialect resolver maps it to `comfyui`.
 - ComfyUI dialect hides the API-only parameter selectors (size / aspect /
   resolution / quality) and shows a second, wrapping row of the exposed params.

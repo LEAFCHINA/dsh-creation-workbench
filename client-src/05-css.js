@@ -381,6 +381,20 @@
 .iw-comfy-prompt-bind{flex:0 1 330px;min-width:210px;max-width:360px}
 .iw-comfy-prompt-bind .iw-select{max-width:360px;height:26px;font-size:11.5px}
 .iw-comfy-picker-empty{padding:14px 8px;font-size:11.5px;line-height:1.6;color:var(--dsw-alias-label-secondary)}
+.iw-comfy-order{display:flex;flex-direction:column;gap:5px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:9px;background:var(--dsw-alias-bg-layer-1)}
+.iw-comfy-order-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.iw-comfy-order-title{font-size:12px;font-weight:600}
+.iw-comfy-order-list{display:flex;flex-wrap:wrap;gap:5px;min-height:30px}
+.iw-comfy-order-item{display:inline-flex;align-items:center;gap:4px;padding:3px 5px 3px 6px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-base);cursor:grab;user-select:none}
+.iw-comfy-order-item.dragging{opacity:.45;cursor:grabbing}
+.iw-comfy-order-item.drop-target{outline:2px dashed var(--dsw-alias-brand-primary);outline-offset:1px}
+.iw-comfy-order-handle{color:var(--dsw-alias-label-secondary);font-size:10px;letter-spacing:-1px;cursor:grab}
+.iw-comfy-order-label{font-size:11.5px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iw-comfy-order-type{font-size:10px;color:var(--dsw-alias-label-secondary);padding:0 4px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1)}
+.iw-comfy-order-btn{width:18px;height:18px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;line-height:1;cursor:pointer}
+.iw-comfy-order-btn:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
+.iw-comfy-order-btn:disabled{opacity:.35;cursor:default}
+.iw-comfy-order-remove:hover:not(:disabled){color:var(--dsw-alias-state-error-primary)}
 .iw-comfy-input-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:3px 0;font-size:11.5px}
 .iw-comfy-input-name{min-width:110px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary);font-family:ui-monospace,Consolas,monospace;font-size:11px}
 .iw-comfy-input-row .iw-input{height:26px;font-size:11.5px}

@@ -2,6 +2,22 @@
 
 First public release: **1.2.2**.
 
+## 1.2.5
+
+- **Fix: switching between ComfyUI workflows could run the wrong workflow.** The
+  host preferred a `params.workflowId` value over the `comfy:<id>` model prefix,
+  so a stale id from a previous selection silently asked ComfyUI for the old
+  workflow. The model prefix is now authoritative (the stale value is logged
+  and ignored).
+- **Fix: per-workflow composer state leaked across workflows.** Param keys are
+  `p_1`, `p_2`, … in every workflow, so switching from workflow A to B carried
+  A's values, randomize flags and 张数 into B. Each workflow now remembers its
+  own state (`params.workflowCache`) and switching restores it; a workflow
+  without `batch_size` always sends `n = 1`.
+- **New: parameter order preview with drag-and-drop** in the workflow editor.
+  Selected params appear as chips in their composer order; drag them (or use
+  ↑↓) to reorder, ✕ to uncheck. The saved order is the order the composer uses.
+
 ## 1.2.4
 
 - Composer: the **张数** selector is now tied to the workflow's exposed

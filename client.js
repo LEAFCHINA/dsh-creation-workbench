@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-image-workbench'
-    const BUILD = '2026-11-12-client-m2-22'
+    const BUILD = '2026-11-12-client-m2-23'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.image-workbench.v1.ui'
 
@@ -500,6 +500,20 @@ window.__ModuleLoader__.load({
 .iw-comfy-prompt-bind{flex:0 1 330px;min-width:210px;max-width:360px}
 .iw-comfy-prompt-bind .iw-select{max-width:360px;height:26px;font-size:11.5px}
 .iw-comfy-picker-empty{padding:14px 8px;font-size:11.5px;line-height:1.6;color:var(--dsw-alias-label-secondary)}
+.iw-comfy-order{display:flex;flex-direction:column;gap:5px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:9px;background:var(--dsw-alias-bg-layer-1)}
+.iw-comfy-order-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.iw-comfy-order-title{font-size:12px;font-weight:600}
+.iw-comfy-order-list{display:flex;flex-wrap:wrap;gap:5px;min-height:30px}
+.iw-comfy-order-item{display:inline-flex;align-items:center;gap:4px;padding:3px 5px 3px 6px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-base);cursor:grab;user-select:none}
+.iw-comfy-order-item.dragging{opacity:.45;cursor:grabbing}
+.iw-comfy-order-item.drop-target{outline:2px dashed var(--dsw-alias-brand-primary);outline-offset:1px}
+.iw-comfy-order-handle{color:var(--dsw-alias-label-secondary);font-size:10px;letter-spacing:-1px;cursor:grab}
+.iw-comfy-order-label{font-size:11.5px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iw-comfy-order-type{font-size:10px;color:var(--dsw-alias-label-secondary);padding:0 4px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1)}
+.iw-comfy-order-btn{width:18px;height:18px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;line-height:1;cursor:pointer}
+.iw-comfy-order-btn:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
+.iw-comfy-order-btn:disabled{opacity:.35;cursor:default}
+.iw-comfy-order-remove:hover:not(:disabled){color:var(--dsw-alias-state-error-primary)}
 .iw-comfy-input-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:3px 0;font-size:11.5px}
 .iw-comfy-input-name{min-width:110px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary);font-family:ui-monospace,Consolas,monospace;font-size:11px}
 .iw-comfy-input-row .iw-input{height:26px;font-size:11.5px}
@@ -733,6 +747,26 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * v1.2.5: remembered per-workflow composer state. Switching workflows used
+     * to carry the previous workflow's values/randomize/n over because the
+     * param keys (p_1, p_2, …) are the same in every workflow.
+     */
+    function normalizeWorkflowCache(raw) {
+      const out = {}
+      if (!isObj(raw)) return out
+      for (const key of Object.keys(raw)) {
+        const entry = raw[key]
+        if (!isObj(entry)) continue
+        out[key] = {
+          values: normalizeWorkflowParams(entry.values),
+          randomize: normalizeWorkflowRandomize(entry.randomize),
+          n: clamp(Math.round(num(entry.n, 1)), 1, 10),
+        }
+      }
+      return out
+    }
+
+    /**
      * v1.2.4: the workflow's exposed `batch_size` input (if any). The composer's
      * 张数 selector is only shown when this exists — otherwise one prompt run
      * equals one image and a count selector would be misleading.
@@ -945,6 +979,26 @@ window.__ModuleLoader__.load({
           else if (!str(opts.id) && suggestedSpec) selected[matchKey] = true
         }
       }
+      // v1.2.5: composer display order for the selected params. Editing keeps
+      // the saved order; a fresh import follows the inspector's suggestion
+      // order, then node order. The editor lets the user drag it around.
+      const order = []
+      const seenOrder = new Set()
+      const pushOrder = (key) => {
+        if (!isObj(templates[key]) || !selected[key] || seenOrder.has(key)) return
+        seenOrder.add(key)
+        order.push(key)
+      }
+      for (const spec of existing) {
+        if (isObj(spec)) pushOrder(`${str(spec.nodeId)}.${str(spec.inputName)}`)
+      }
+      for (const spec of suggested) {
+        if (isObj(spec)) pushOrder(`${str(spec.nodeId)}.${str(spec.inputName)}`)
+      }
+      for (const node of nodes) {
+        for (const input of node.inputs) pushOrder(`${node.nodeId}.${input.inputName}`)
+      }
+
       return {
         id: str(opts.id),
         name: str(opts.name),
@@ -957,6 +1011,7 @@ window.__ModuleLoader__.load({
         suggestedParams: suggested,
         selected,
         templates,
+        order,
         isNew: !str(opts.id),
       }
     }
@@ -1004,6 +1059,7 @@ window.__ModuleLoader__.load({
         workflowId: DEFAULT_PARAMS.workflowId,
         workflowParams: {},
         workflowRandomize: {},
+        workflowCache: {},
       }
     }
 
@@ -1019,6 +1075,7 @@ window.__ModuleLoader__.load({
       params.workflowId = comfyWorkflowIdOf(source.model) || str(source.workflowId)
       params.workflowParams = normalizeWorkflowParams(source.workflowParams)
       params.workflowRandomize = normalizeWorkflowRandomize(source.workflowRandomize)
+      params.workflowCache = normalizeWorkflowCache(source.workflowCache)
       return params
     }
 
@@ -4003,17 +4060,44 @@ window.__ModuleLoader__.load({
                         // v1.2: entering workflow mode drops reference images
                         // (unsupported) and the previous workflow's values.
                         if (nextWorkflowId && typeof onClearRefs === 'function') onClearRefs()
-                        // v1.2.4: a workflow without batch_size runs once per
-                        // send, so reset the stale 张数 value to 1.
                         const nextWorkflow = findWorkflowById(workflowList, nextWorkflowId)
                         const nextHasBatch = !!workflowBatchSpec(nextWorkflow)
+                        // v1.2.5: remember the current workflow's state and restore
+                        // the target workflow's own state. Param keys (p_1, p_2, …)
+                        // are identical in every workflow, so carrying values over
+                        // silently ran the new workflow with the old one's settings
+                        // (wrong seed/size, and a "张数" that belonged to another
+                        // workflow). A workflow without batch_size always runs once.
+                        const cache = isObj(params.workflowCache) ? { ...params.workflowCache } : {}
+                        const previousWorkflowId =
+                          comfyWorkflowIdOf(params.model) || str(params.workflowId)
+                        if (previousWorkflowId) {
+                          cache[previousWorkflowId] = {
+                            values: isObj(params.workflowParams) ? { ...params.workflowParams } : {},
+                            randomize: isObj(params.workflowRandomize)
+                              ? { ...params.workflowRandomize }
+                              : {},
+                            n: params.n,
+                          }
+                        }
+                        const restored =
+                          nextWorkflowId && isObj(cache[nextWorkflowId]) ? cache[nextWorkflowId] : null
+                        const restoredValues =
+                          restored && isObj(restored.values) ? { ...restored.values } : {}
+                        const restoredRandomize =
+                          restored && isObj(restored.randomize) ? { ...restored.randomize } : {}
+                        const restoredN = restored
+                          ? clamp(Math.round(num(restored.n, 1)), 1, maxN)
+                          : 1
                         onParamsChange({
                           ...params,
                           model: value,
                           quality: nextQuality,
-                          n: nextWorkflowId && !nextHasBatch ? 1 : params.n,
+                          n: nextWorkflowId && nextHasBatch ? restoredN : nextWorkflowId ? 1 : params.n,
                           workflowId: nextWorkflowId,
-                          workflowParams: nextWorkflowId ? { ...workflowParamValues } : {},
+                          workflowParams: restoredValues,
+                          workflowRandomize: restoredRandomize,
+                          workflowCache: cache,
                         })
                       },
                       title: '模型',
@@ -6002,6 +6086,28 @@ window.__ModuleLoader__.load({
         visibleNodes[0] ||
         null
 
+      // v1.2.5: composer display order of the selected params, editable by
+      // dragging the preview (or with the ↑↓ buttons). Saved params keep this
+      // order, so the composer row renders exactly like the preview.
+      const [order, setOrder] = useState(() => {
+        const fromDraft = Array.isArray(draft.order) ? draft.order : null
+        const keys = fromDraft || Object.keys(isObj(draft.selected) ? draft.selected : {})
+        return keys.filter((key) => isObj(templates[key]) && !!selected[key])
+      })
+      const [dragIndex, setDragIndex] = useState(-1)
+      const [dropIndex, setDropIndex] = useState(-1)
+      const selectedOrder = order.filter((key) => isObj(templates[key]) && !!selected[key])
+      const moveOrder = (from, to) => {
+        setOrder((previous) => {
+          if (from === to || from < 0 || to < 0) return previous
+          if (from >= previous.length || to >= previous.length) return previous
+          const next = previous.slice()
+          const [item] = next.splice(from, 1)
+          next.splice(to, 0, item)
+          return next
+        })
+      }
+
       // v1.2.2: exactly one exposed text input can be bound to the composer
       // box. The binding is explicit (a selector in the toolbar), so the main
       // prompt always lands in a real workflow input instead of being dropped.
@@ -6036,7 +6142,10 @@ window.__ModuleLoader__.load({
       const bindPrompt = (key) => {
         const nextKey = str(key)
         setPromptBinding(nextKey)
-        if (nextKey) setSelected((previous) => ({ ...previous, [nextKey]: true }))
+        if (nextKey) {
+          setSelected((previous) => ({ ...previous, [nextKey]: true }))
+          setOrder((previous) => (previous.indexOf(nextKey) >= 0 ? previous : [...previous, nextKey]))
+        }
       }
 
       const selectSuggested = () => {
@@ -6046,13 +6155,18 @@ window.__ModuleLoader__.load({
           return
         }
         const next = { ...selected }
+        const added = []
         for (const spec of suggested) {
           if (!isObj(spec)) continue
           const matchKey = `${str(spec.nodeId)}.${str(spec.inputName)}`
           if (!isObj(templates[matchKey])) continue
+          if (!next[matchKey]) added.push(matchKey)
           next[matchKey] = true
         }
         setSelected(next)
+        if (added.length) {
+          setOrder((previous) => [...previous, ...added.filter((key) => previous.indexOf(key) < 0)])
+        }
         setError('')
       }
 
@@ -6060,10 +6174,17 @@ window.__ModuleLoader__.load({
         const next = {}
         for (const key of Object.keys(selected)) next[key] = false
         setSelected(next)
+        setOrder([])
       }
 
       const toggleParam = (matchKey) => {
+        const turningOn = !selected[matchKey]
         setSelected((previous) => ({ ...previous, [matchKey]: !previous[matchKey] }))
+        if (turningOn) {
+          setOrder((previous) => (previous.indexOf(matchKey) >= 0 ? previous : [...previous, matchKey]))
+        } else {
+          setOrder((previous) => previous.filter((key) => key !== matchKey))
+        }
       }
 
       const updateTemplate = (matchKey, patch) => {
@@ -6097,10 +6218,17 @@ window.__ModuleLoader__.load({
         // always saved (and marked role=prompt) even if it was left unchecked.
         const effectivePromptKey =
           promptBinding && isObj(templates[promptBinding]) ? promptBinding : ''
-        const saveKeys =
-          effectivePromptKey && selectedKeys.indexOf(effectivePromptKey) < 0
-            ? [...selectedKeys, effectivePromptKey]
-            : selectedKeys
+        // v1.2.5: the dragged preview order is the saved order (composer renders
+        // params in that order). Any still-selected key missing from the order
+        // is appended, and the bound prompt input is always included.
+        const ordered = order.filter((key) => isObj(templates[key]) && !!selected[key])
+        for (const key of selectedKeys) {
+          if (ordered.indexOf(key) < 0) ordered.push(key)
+        }
+        if (effectivePromptKey && ordered.indexOf(effectivePromptKey) < 0) {
+          ordered.push(effectivePromptKey)
+        }
+        const saveKeys = ordered
         const params = []
         for (const matchKey of saveKeys) {
           const tpl = isObj(templates[matchKey]) ? templates[matchKey] : {}
@@ -6348,6 +6476,99 @@ window.__ModuleLoader__.load({
         return h(React.Fragment, null, head, ...rows)
       }
 
+      // v1.2.5: preview of the composer param row. Drag to reorder (HTML5 DnD),
+      // with ↑↓ buttons as a keyboard/no-drag fallback; ✕ unchecks the param.
+      const orderTypeLabel = { text: '文本', int: '整数', float: '小数', bool: '开关', select: '选项' }
+      const renderOrderChip = (key, index) => {
+        const tpl = isObj(templates[key]) ? templates[key] : {}
+        const label = str(tpl.label) || str(tpl.inputName) || key
+        const typeLabel = orderTypeLabel[tpl.type] || str(tpl.type) || ''
+        return h(
+          'div',
+          {
+            key,
+            className: cx(
+              'iw-comfy-order-item',
+              dragIndex === index && 'dragging',
+              dropIndex === index && dragIndex !== index && 'drop-target',
+            ),
+            draggable: !busy,
+            title: `${label}（${str(tpl.nodeId)}.${str(tpl.inputName)}）`,
+            onDragStart: (event) => {
+              setDragIndex(index)
+              try {
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData('text/plain', key)
+              } catch {
+                // ignore: drag data is a nicety, the index state is the source
+              }
+            },
+            onDragOver: (event) => {
+              event.preventDefault()
+              if (dropIndex !== index) setDropIndex(index)
+            },
+            onDragLeave: () => {
+              if (dropIndex === index) setDropIndex(-1)
+            },
+            onDrop: (event) => {
+              event.preventDefault()
+              moveOrder(dragIndex, index)
+              setDragIndex(-1)
+              setDropIndex(-1)
+            },
+            onDragEnd: () => {
+              setDragIndex(-1)
+              setDropIndex(-1)
+            },
+          },
+          h('span', { className: 'iw-comfy-order-handle', 'aria-hidden': 'true' }, '⋮⋮'),
+          h('span', { className: 'iw-comfy-order-label' }, label),
+          typeLabel ? h('span', { className: 'iw-comfy-order-type' }, typeLabel) : null,
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'iw-comfy-order-btn',
+              title: '上移',
+              disabled: busy || index === 0,
+              onClick: (event) => {
+                event.stopPropagation()
+                moveOrder(index, index - 1)
+              },
+            },
+            '↑',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'iw-comfy-order-btn',
+              title: '下移',
+              disabled: busy || index >= selectedOrder.length - 1,
+              onClick: (event) => {
+                event.stopPropagation()
+                moveOrder(index, index + 1)
+              },
+            },
+            '↓',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'iw-comfy-order-btn iw-comfy-order-remove',
+              title: '取消勾选',
+              disabled: busy,
+              onClick: (event) => {
+                event.stopPropagation()
+                toggleParam(key)
+              },
+            },
+            '✕',
+          ),
+        )
+      }
+
       return h(
         Modal,
         {
@@ -6447,6 +6668,23 @@ window.__ModuleLoader__.load({
           ),
           h(Btn, { small: true, onClick: clearSelected, disabled: busy }, '清空已勾选'),
           h('span', { className: 'iw-field-hint' }, `已勾选 ${selectedKeys.length} 个参数`),
+        ),
+        h(
+          'div',
+          { className: 'iw-comfy-order' },
+          h(
+            'div',
+            { className: 'iw-comfy-order-head' },
+            h('span', { className: 'iw-comfy-order-title' }, '对话框参数顺序'),
+            h('span', { className: 'iw-field-hint' }, '拖动排序（或点 ↑↓）；保存后对话框按此顺序显示'),
+          ),
+          selectedOrder.length
+            ? h('div', { className: 'iw-comfy-order-list' }, selectedOrder.map(renderOrderChip))
+            : h(
+                'div',
+                { className: 'iw-field-hint' },
+                '勾选参数后会出现在这里，可拖动调整它们在对话框中的显示顺序。',
+              ),
         ),
         nodes.length
           ? h(

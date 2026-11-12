@@ -393,10 +393,19 @@ function normalizeGenParams(raw) {
   }
   // CONTRACT 补丁 v1.2 §2.5: ComfyUI workflow selections travel as params.
   if (params.model.startsWith('comfy:')) {
+    // v1.2.5: the model prefix is authoritative. A stale params.workflowId from
+    // a previous workflow selection must never override the workflow the user
+    // currently sees selected (that silently ran workflow A for workflow B).
+    const modelWorkflowId = params.model.slice('comfy:'.length)
     const rawWorkflowId = typeof raw.workflowId === 'string' ? raw.workflowId.trim() : ''
-    const workflowId = rawWorkflowId || params.model.slice('comfy:'.length)
+    const workflowId = modelWorkflowId || rawWorkflowId
     if (!comfy.isWorkflowId(workflowId)) throw new ApiError('工作流 ID 无效', 'INVALID_REQUEST', 400)
     params.workflowId = workflowId
+    if (rawWorkflowId && rawWorkflowId !== workflowId) {
+      void store.logHost(
+        `generate: stale workflowId param "${rawWorkflowId}" overridden by model "${params.model}"`,
+      )
+    }
     const workflowParams = {}
     const source = raw.workflowParams
     if (source !== undefined && source !== null) {
