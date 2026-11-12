@@ -324,7 +324,7 @@ for (const entry of [registered.sidebar[0], registered.main[0]]) {
 }
 
 console.log('\n== 4. 关键实现存在性（静态） ==')
-ok('BUILD 已递增', /2026-11-12-client-m2-26/.test(code))
+ok('BUILD 已递增', /2026-11-13-client-m2-27/.test(code))
 ok('comfy optgroup 文案存在', /ComfyUI 工作流/.test(code))
 ok('动态参数行类名存在', /iw-composer-params/.test(code))
 ok('参数编辑器存在', /ComfyParamEditor/.test(code))
@@ -336,6 +336,13 @@ ok('会话草稿持久化存在', /drafts: draftRef\.current/.test(code))
 ok('会话草稿切换恢复存在', /draftRef\.current\[previousId\]/.test(code))
 ok('ComfyUI 占位提示已区分', /ComfyUI 工作流模式：文字写入绑定的提示词节点/.test(code))
 ok('会话级工作流/参数快照存在', /conversationParams: convParamsRef\.current/.test(code))
+ok('活动栏四个标签', /WORKBENCH_TABS/.test(code) && /资产库/.test(code) && /工作流/.test(code))
+ok('工作区首页问候存在', /现在想干什么呀/.test(code))
+ok('首页生成分类存在', /生成视频/.test(code) && /生成声音/.test(code))
+ok('工作流分类助手存在', /workflowCategoryLabel/.test(code))
+ok('分类选择器存在', /自定义分类名/.test(code))
+ok('工作流看板存在', /iw-workflow-grid/.test(code))
+ok('主区域跟随标签存在', /iw-workspace-view/.test(code))
 ok('切换会话恢复参数快照', /convParamsRef\.current\[previousId\]/.test(code))
 ok('排队任务显示排队中', /排队中…/.test(code) && /queued/.test(code))
 ok('本地任务无超时文案', /本地 ComfyUI 任务不设超时/.test(code))
@@ -358,6 +365,7 @@ const factory = new Function(
   'h', 'React', 'useState', 'useEffect', 'useRef',
   'Modal', 'Field', 'Btn', 'Icon', 'Spinner', 'Select',
   'str', 'isObj', 'cx', 'num', 'COMFY_PARAM_TYPES',
+  'WORKFLOW_CATEGORY_ORDER', 'WORKFLOW_CATEGORY_LABELS', 'workflowCategoryLabel',
   editorSlice + '\nreturn ComfyParamEditor',
 )
 const SelectStub = (p) => createElement('select-stub', p)
@@ -369,6 +377,12 @@ const Editor = factory(
   (v) => (v == null ? '' : String(v)), (v) => !!v && typeof v === 'object' && !Array.isArray(v),
   (...parts) => parts.filter(Boolean).join(' '), (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d),
   ['text', 'int', 'float', 'bool', 'select'],
+  ['edit', 'image', 'video', 'audio', 'model'],
+  { edit: '编辑', image: '生图', video: '生视频', audio: '生音频', model: '生模型' },
+  (category) =>
+    ({ edit: '编辑', image: '生图', video: '生视频', audio: '生音频', model: '生模型' }[category] ||
+      category ||
+      '生图'),
 )
 
 const inputsOf = (specs) => specs.map(([inputName, type, value]) => ({ inputName, type, value }))

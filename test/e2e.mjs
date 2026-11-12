@@ -57,6 +57,7 @@ try {
   ok('cfg 推断为 float', flat.some((i) => i.inputName === 'cfg' && i.type === 'float'))
   ok('CLIPTextEncode.text 建议为 prompt', (inspected?.suggestedParams || []).some((p) => p.role === 'prompt'), JSON.stringify(inspected?.suggestedParams))
   ok('有 outputs 提示', Array.isArray(inspected?.outputs) && inspected.outputs.length > 0, JSON.stringify(inspected?.outputs))
+  ok('inspect 建议分类为 image', inspected?.suggestedCategory === 'image', JSON.stringify(inspected?.suggestedCategory))
 
   const params = [
     { key: 'p1', nodeId: '6', inputName: 'text', label: '正向提示词', type: 'text', role: 'prompt' },
@@ -78,6 +79,31 @@ try {
   const got = await h.op('comfy.workflow.get', { id: wfId })
   const gotWf = got?.workflow || got
   ok('get 返回 json 与 params', Boolean(gotWf?.json) && gotWf?.params?.length === params.length, `params=${gotWf?.params?.length}`)
+
+  // v2.1: workflow categories (preset + custom) round-trip through list/get.
+  const videoSaved = await h.op('comfy.workflow.save', {
+    name: '视频测试工作流',
+    category: 'video',
+    json: workflow,
+    params: [],
+  })
+  const videoId = videoSaved?.workflow?.id
+  const listAfterCategory = await h.op('comfy.workflow.list')
+  const videoItem = (listAfterCategory?.workflows || []).find((item) => item.id === videoId)
+  ok('category 随保存生效', videoItem?.category === 'video', JSON.stringify(videoItem))
+  const customSaved = await h.op('comfy.workflow.save', {
+    name: '自定义分类工作流',
+    category: '3D 场景',
+    json: workflow,
+    params: [],
+  })
+  const customId = customSaved?.workflow?.id
+  const customGot = await h.op('comfy.workflow.get', { id: customId })
+  ok('自定义分类原样保留', customGot?.workflow?.category === '3D 场景', JSON.stringify(customGot?.workflow?.category))
+  await h.op('comfy.workflow.delete', { id: videoId })
+  await h.op('comfy.workflow.delete', { id: customId })
+  const afterCleanup = await h.op('comfy.workflow.list')
+  ok('分类测试工作流已清理', (afterCleanup?.workflows || []).length === 1, JSON.stringify((afterCleanup?.workflows || []).length))
 
   section('3. 非法工作流拒绝')
   let rejected = false

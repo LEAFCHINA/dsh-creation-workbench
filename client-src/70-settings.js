@@ -325,6 +325,7 @@
             buildComfyEditorDraft({
               id: str(workflow.id) || workflowId,
               name: str(workflow.name),
+              category: str(workflow.category),
               json: workflow.json,
               existingParams: Array.isArray(workflow.params) ? workflow.params : [],
               inspection,
@@ -340,6 +341,7 @@
       const saveComfyWorkflow = async (payload) => {
         const body = {
           name: str(payload && payload.name).trim(),
+          category: str(payload && payload.category).trim() || 'image',
           params: Array.isArray(payload && payload.params) ? payload.params : [],
         }
         if (payload && payload.id) body.id = str(payload.id)
@@ -1225,6 +1227,7 @@
                       { className: 'iw-comfy-workflow-name', title: workflow.name },
                       workflow.name,
                     ),
+                    h('span', { className: 'iw-tag' }, workflowCategoryLabel(workflow.category)),
                     h('span', { className: 'iw-field-hint' }, `${workflow.paramCount} 个参数`),
                     h(
                       'span',
@@ -1312,6 +1315,18 @@
     function ComfyParamEditor(props) {
       const draft = isObj(props.draft) ? props.draft : {}
       const [name, setName] = useState(() => str(draft.name))
+      // v2.1: fixed 5 presets + free-form custom category name.
+      const initialCategory = str(draft.category) || str(draft.suggestedCategory) || 'image'
+      const initialIsPreset = WORKFLOW_CATEGORY_ORDER.indexOf(initialCategory) >= 0
+      const [category, setCategory] = useState(initialIsPreset ? initialCategory : '__custom__')
+      const [customCategory, setCustomCategory] = useState(initialIsPreset ? '' : initialCategory)
+      const categoryOptions = [
+        ...WORKFLOW_CATEGORY_ORDER.map((id) => ({
+          value: id,
+          label: WORKFLOW_CATEGORY_LABELS[id] || id,
+        })),
+        { value: '__custom__', label: '自定义…' },
+      ]
       const [selected, setSelected] = useState(() =>
         isObj(draft.selected) ? { ...draft.selected } : {},
       )
@@ -1553,7 +1568,20 @@
         setBusy(true)
         setError('')
         try {
-          await props.onSave({ id: str(draft.id), json: draft.json, name: trimmedName, params })
+          const effectiveCategory =
+            category === '__custom__' ? str(customCategory).trim() : str(category)
+          if (!effectiveCategory) {
+            setError('请填写工作流分类')
+            setBusy(false)
+            return
+          }
+          await props.onSave({
+            id: str(draft.id),
+            json: draft.json,
+            name: trimmedName,
+            category: effectiveCategory,
+            params,
+          })
           if (props.onDone) props.onDone()
         } catch (failure) {
           setError((failure && failure.message) || String(failure))
@@ -1902,6 +1930,30 @@
             disabled: busy,
             onChange: (event) => setName(event.target.value),
           }),
+        ),
+        h(
+          Field,
+          { label: '分类' },
+          h(
+            'div',
+            { className: 'iw-comfy-category-row' },
+            h(Select, {
+              className: 'iw-param-select',
+              value: category,
+              options: categoryOptions,
+              disabled: busy,
+              onChange: (value) => setCategory(value),
+            }),
+            category === '__custom__'
+              ? h('input', {
+                  className: 'iw-input',
+                  value: customCategory,
+                  placeholder: '自定义分类名，例如「3D 场景」',
+                  disabled: busy,
+                  onChange: (event) => setCustomCategory(event.target.value),
+                })
+              : null,
+          ),
         ),
         h(
           'div',

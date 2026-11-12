@@ -156,6 +156,227 @@
     /* Workbench (state container)                                         */
     /* ------------------------------------------------------------------ */
 
+    function greetingText() {
+      const hour = new Date().getHours()
+      if (hour < 5) return '夜深了'
+      if (hour < 11) return '早上好'
+      if (hour < 14) return '中午好'
+      if (hour < 18) return '下午好'
+      if (hour < 23) return '晚上好'
+      return '夜深了'
+    }
+
+    /**
+     * v2.1: workspace home. Shows a greeting + 「编辑 / 生成」intent picker when
+     * the conversation is empty; choosing a category pre-selects the newest
+     * workflow of that category (or the first API model for image) and focuses
+     * the composer.
+     */
+    function HomeHero(props) {
+      const [expanded, setExpanded] = useState(false)
+      const workflows = Array.isArray(props.workflows) ? props.workflows : []
+      const models = Array.isArray(props.models) ? props.models : []
+      const countOf = (category) =>
+        workflows.filter((workflow) => str(workflow.category) === category).length
+      const categories = [
+        { id: 'image', label: '生成图片', icon: 'image', ok: countOf('image') > 0 || models.length > 0 },
+        { id: 'video', label: '生成视频', icon: 'chart', ok: countOf('video') > 0 },
+        { id: 'audio', label: '生成声音', icon: 'dots', ok: countOf('audio') > 0 },
+        { id: 'model', label: '生成模型', icon: 'folder', ok: countOf('model') > 0 },
+      ]
+      return h(
+        'div',
+        { className: 'iw-home' },
+        h('div', { className: 'iw-home-greet' }, `${greetingText()}~ 现在想干什么呀？`),
+        h(
+          'div',
+          { className: 'iw-home-actions' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'iw-home-action',
+              title: '从一张图开始编辑（后续版本支持参考图输入）',
+              onClick: () => props.onEdit(),
+            },
+            h(Icon, { name: 'pencil', size: 15 }),
+            h('span', null, '编辑'),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: cx('iw-home-action', 'primary', expanded && 'active'),
+              title: '选择生成类型',
+              onClick: () => setExpanded((value) => !value),
+            },
+            h(Icon, { name: 'spark', size: 15 }),
+            h('span', null, '生成'),
+          ),
+        ),
+        expanded
+          ? h(
+              'div',
+              { className: 'iw-home-categories' },
+              categories.map((category) =>
+                h(
+                  'button',
+                  {
+                    key: category.id,
+                    type: 'button',
+                    className: cx('iw-home-category', category.ok && 'ready'),
+                    title: category.ok
+                      ? `使用「${workflowCategoryLabel(category.id)}」分类的工作流或模型`
+                      : '该分类还没有工作流，点击去设置导入',
+                    onClick: () =>
+                      category.ok ? props.onGenerate(category.id) : props.onOpenSettings(),
+                  },
+                  h(Icon, { name: category.icon, size: 13 }),
+                  h('span', null, category.label),
+                ),
+              ),
+            )
+          : null,
+        h(
+          'div',
+          { className: 'iw-home-hint' },
+          '也可以直接在下方输入框描述，按 Enter 发送',
+        ),
+      )
+    }
+
+
+    /** v2.1: full-page workflow manager grouped by category. */
+    function WorkflowBoard(props) {
+      const workflows = Array.isArray(props.workflows) ? props.workflows : []
+      const byCategory = new Map()
+      for (const workflow of workflows) {
+        const category = str(workflow.category) || 'image'
+        if (!byCategory.has(category)) byCategory.set(category, [])
+        byCategory.get(category).push(workflow)
+      }
+      const categories = [...byCategory.keys()].sort(compareWorkflowCategory)
+      return h(
+        'div',
+        { className: 'iw-board' },
+        h(
+          'div',
+          { className: 'iw-board-head' },
+          h('div', { className: 'iw-board-title' }, '工作流'),
+          h(
+            'div',
+            { className: 'iw-board-sub' },
+            `共 ${workflows.length} 个，按分类分组。编辑参数、导入新工作流都在设置里。`,
+          ),
+          h(
+            'button',
+            { type: 'button', className: 'iw-btn', onClick: props.onOpenSettings },
+            h(Icon, { name: 'plus', size: 13 }),
+            '导入 / 管理',
+          ),
+        ),
+        workflows.length === 0
+          ? h(
+              'div',
+              { className: 'iw-main-empty' },
+              h(Icon, { name: 'chart', size: 30 }),
+              h('div', { className: 'iw-main-empty-title' }, '还没有工作流'),
+              h(
+                'div',
+                { className: 'iw-main-empty-desc' },
+                '在设置 → ComfyUI 里导入 API 格式的工作流，并选择它的分类。',
+              ),
+              h(
+                'button',
+                { type: 'button', className: 'iw-home-action primary', onClick: props.onOpenSettings },
+                '打开设置',
+              ),
+            )
+          : categories.map((category) => {
+              const list = byCategory.get(category) || []
+              return h(
+                'section',
+                { key: category, className: 'iw-board-group' },
+                h(
+                  'div',
+                  { className: 'iw-board-group-head' },
+                  h('span', { className: 'iw-board-group-title' }, workflowCategoryLabel(category)),
+                  h('span', { className: 'iw-board-group-count' }, `${list.length} 个`),
+                ),
+                h(
+                  'div',
+                  { className: 'iw-workflow-grid' },
+                  list.map((workflow) =>
+                    h(
+                      'div',
+                      { key: workflow.id, className: 'iw-workflow-card' },
+                      h(
+                        'div',
+                        { className: 'iw-workflow-card-head' },
+                        h(
+                          'span',
+                          { className: 'iw-workflow-card-name', title: workflow.name },
+                          workflow.name,
+                        ),
+                        h('span', { className: 'iw-tag' }, workflowCategoryLabel(workflow.category)),
+                      ),
+                      h(
+                        'div',
+                        { className: 'iw-workflow-card-meta' },
+                        `${workflow.paramCount || 0} 个参数 · 更新于 ${
+                          workflow.updatedAt ? fmtRelative(workflow.updatedAt) : '—'
+                        }`,
+                      ),
+                      h(
+                        'div',
+                        { className: 'iw-workflow-card-actions' },
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'iw-btn',
+                            onClick: () => props.onUse(workflow.id),
+                          },
+                          '使用',
+                        ),
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'iw-btn',
+                            onClick: () => props.onEditWorkflow(workflow.id),
+                          },
+                          '编辑参数',
+                        ),
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'iw-btn danger',
+                            onClick: () => props.onDelete(workflow),
+                          },
+                          '删除',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            }),
+      )
+    }
+
+    function ComingSoon(props) {
+      return h(
+        'div',
+        { className: 'iw-main-empty' },
+        h(Icon, { name: props.icon || 'spark', size: 30 }),
+        h('div', { className: 'iw-main-empty-title' }, props.title),
+        h('div', { className: 'iw-main-empty-desc' }, props.desc),
+        props.badge ? h('div', { className: 'iw-side-tabinfo-badge' }, props.badge) : null,
+      )
+    }
+
     function Workbench() {
       // P2-02: lazier localStorage read — passing loadUiState() to useRef would
       // evaluate it on every render (a getItem + JSON.parse per keystroke).
@@ -182,6 +403,13 @@
       // v1.2: local ComfyUI workflow list (model dropdown + dynamic params).
       const [workflows, setWorkflows] = useState([])
       const [workflowsLoaded, setWorkflowsLoaded] = useState(false)
+      // v2.1: sidebar activity tab; the main area follows it.
+      const [activeTab, setActiveTab] = useState(() => {
+        const storedTab = str(storedUiRef.current.activeTab)
+        return ['workspace', 'assets', 'templates', 'workflows'].indexOf(storedTab) >= 0
+          ? storedTab
+          : 'workspace'
+      })
       const [uploading, setUploading] = useState(false)
       const [sending, setSending] = useState(false)
       const [jobs, setJobs] = useState([])
@@ -589,12 +817,13 @@
             activeConversationId,
             expanded,
             params,
+            activeTab,
             drafts: draftRef.current,
             conversationParams: convParamsRef.current,
           })
         }, 150)
         return () => clearTimeout(timer)
-      }, [boot.status, activeWorkspaceId, activeConversationId, expanded, params, prompt])
+      }, [boot.status, activeWorkspaceId, activeConversationId, expanded, params, prompt, activeTab])
 
       // v1.2: a persisted comfy:<id> selection must be validated against the
       // loaded workflow list — if that workflow vanished, fall back to a model.
@@ -1242,6 +1471,123 @@
         }
       }
 
+      /** v2.1: switch the composer to a ComfyUI workflow and focus the input. */
+      async function applyComfyWorkflowId(workflowId) {
+        const id = str(workflowId)
+        if (!id) return
+        const workflow =
+          findWorkflowById(workflowsRef.current, id) || findWorkflowById(workflows, id)
+        if (!workflow) {
+          pushToast('error', '工作流不存在或已删除')
+          return
+        }
+        setActiveTab('workspace')
+        setParams((previous) => ({
+          ...previous,
+          model: `comfy:${workflow.id}`,
+          workflowId: workflow.id,
+          workflowParams: {},
+          workflowRandomize: {},
+          n: 1,
+        }))
+        if (!activeConvRef.current && activeWsRef.current) {
+          try {
+            await createConversation(activeWsRef.current)
+          } catch (error) {
+            // conversation creation errors already surface through the toast path
+          }
+        }
+        setTimeout(() => {
+          const textarea = textareaRef.current
+          if (textarea && typeof textarea.focus === 'function') textarea.focus()
+        }, 60)
+      }
+
+      function pickWorkflowForCategory(category) {
+        const list = (workflowsRef.current || []).filter(
+          (item) => str(item.category) === category,
+        )
+        if (!list.length) return null
+        return list
+          .slice()
+          .sort((left, right) => str(right.updatedAt).localeCompare(str(left.updatedAt)))[0]
+      }
+
+      /** v2.1 home hero: 「生成图片 / 视频 / 声音 / 模型」. */
+      function handleHomeGenerate(category) {
+        const picked = pickWorkflowForCategory(category)
+        if (picked) {
+          void applyComfyWorkflowId(picked.id)
+          return
+        }
+        if (category === 'image') {
+          const models = settings && Array.isArray(settings.models) ? settings.models : []
+          if (models.length) {
+            setActiveTab('workspace')
+            setParams((previous) => ({
+              ...previous,
+              model: models[0].id,
+              workflowId: '',
+              workflowParams: {},
+            }))
+            setTimeout(() => {
+              const textarea = textareaRef.current
+              if (textarea && typeof textarea.focus === 'function') textarea.focus()
+            }, 60)
+            return
+          }
+        }
+        pushToast('info', `「${workflowCategoryLabel(category)}」分类还没有工作流，先去设置导入`)
+        setSettingsOpen(true)
+      }
+
+      /** v2.1 home hero: 「编辑」→ 选一张编辑类工作流（参考图选择在 v2.4）。 */
+      function handleHomeEdit() {
+        const picked = pickWorkflowForCategory('edit')
+        if (!picked) {
+          pushToast('info', '还没有「编辑」类工作流，先去设置导入并设置分类')
+          setSettingsOpen(true)
+          return
+        }
+        void applyComfyWorkflowId(picked.id)
+        pushToast('info', '已选择编辑工作流；参考图输入将在后续版本开放')
+      }
+
+      async function handleWorkflowDelete(workflow) {
+        const id = str(workflow && workflow.id)
+        if (!id) return
+        let confirmed = true
+        try {
+          confirmed =
+            typeof window.confirm === 'function'
+              ? window.confirm(
+                  `确定删除工作流「${str(workflow.name) || '未命名工作流'}」？此操作不可恢复。`,
+                )
+              : true
+        } catch (error) {
+          confirmed = true
+        }
+        if (!confirmed) return
+        try {
+          await rpc('comfy.workflow.delete', { id })
+          pushToast('success', '工作流已删除')
+          if (
+            isComfyModel(paramsRef.current.model) &&
+            comfyWorkflowIdOf(paramsRef.current.model) === id
+          ) {
+            setParams((previous) => ({
+              ...previous,
+              model: '',
+              workflowId: '',
+              workflowParams: {},
+            }))
+          }
+          await loadWorkflows()
+        } catch (error) {
+          pushToast('error', `删除失败：${(error && error.message) || error}`)
+        }
+      }
+
       /**
        * v1.1: stop a running turn that has no resumable jobId (old data or a
        * host restart dropped the in-memory job). Host reconciles the persisted
@@ -1681,6 +2027,18 @@
 
       const activeWorkspace =
         workspaces.find((workspace) => workspace.id === activeWorkspaceId) || null
+      const conversationTurns =
+        conversation && Array.isArray(conversation.turns) ? conversation.turns : []
+      const homeNode =
+        !conversationLoading && conversationTurns.length === 0
+          ? h(HomeHero, {
+              workflows,
+              models: settings ? settings.models : [],
+              onGenerate: handleHomeGenerate,
+              onEdit: handleHomeEdit,
+              onOpenSettings: () => setSettingsOpen(true),
+            })
+          : null
       const dial = resolveDialect(params.model, settings ? settings.models : [])
       const activeJobs = jobs.filter(
         (job) =>
@@ -1766,6 +2124,9 @@
                 h(
                   'div',
                   { className: 'iw-main' },
+                  h(
+                    'div',
+                    { className: cx('iw-workspace-view', activeTab !== 'workspace' && 'iw-hidden') },
                   h(Topbar, {
                     activeWorkspace,
                     conversation,
@@ -1776,6 +2137,7 @@
                     onOpenTasks: () => setTaskPanelOpen(true),
                   }),
                   h(Canvas, {
+                    home: homeNode,
                     conversation,
                     conversationLoading,
                     activeWorkspace,
@@ -1821,6 +2183,32 @@
                     onToast: pushToast,
                     onClearRefs: () => setRefs([]),
                   }),
+                  ),
+                  activeTab === 'workflows'
+                    ? h(WorkflowBoard, {
+                        workflows,
+                        onUse: (id) => void applyComfyWorkflowId(id),
+                        onEditWorkflow: () => setSettingsOpen(true),
+                        onDelete: handleWorkflowDelete,
+                        onOpenSettings: () => setSettingsOpen(true),
+                      })
+                    : null,
+                  activeTab === 'assets'
+                    ? h(ComingSoon, {
+                        icon: 'image',
+                        title: '资产库',
+                        desc: '跨会话浏览、收藏与复用生成结果。',
+                        badge: 'v2.4 上线',
+                      })
+                    : null,
+                  activeTab === 'templates'
+                    ? h(ComingSoon, {
+                        icon: 'spark',
+                        title: '提示词模板',
+                        desc: '保存常用提示词，用 @ 在输入框快速调用。',
+                        badge: 'v2.2 上线',
+                      })
+                    : null,
                 ),
               )
 

@@ -2,6 +2,23 @@
 
 First public release: **1.2.2**.
 
+## 2.1.0 — activity tabs, workspace home, workflow categories
+
+- **Activity tabs**: the sidebar now has 工作区 / 资产库 / 模板 / 工作流 tabs, and
+  the main area follows the active tab (工作区 canvas keeps its state while other
+  tabs are open).
+- **Workspace home**: an empty conversation shows a time-aware greeting with
+  「编辑 / 生成」; 生成 expands into 生成图片 / 视频 / 声音 / 模型, picks the newest
+  workflow of that category (or the first API model for 图片) and focuses the
+  composer. Direct typing still works as before.
+- **Workflow categories**: workflows carry a `category` (编辑 / 生图 / 生视频 /
+  生音频 / 生模型 or a custom name). The workflow editor has a category selector
+  (with a suggested category inferred from output nodes), the composer dropdown
+  is grouped by category, and the new 工作流 tab lists workflows grouped by
+  category with use / edit / delete actions.
+- 资产库 and 模板 tabs are placeholders in this version (v2.2 / v2.4).
+
+
 ## 2.0.0 — rename to AI 创作工作台 / dsh-creation-workbench
 
 The plugin is now positioned as a personal **creation** workbench (image generation

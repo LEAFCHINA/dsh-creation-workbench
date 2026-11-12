@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-12-client-m2-26'
+    const BUILD = '2026-11-13-client-m2-27'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -611,8 +611,54 @@ window.__ModuleLoader__.load({
   .iw-canvas{padding:16px 20px 8px}
   .iw-composer-dock{padding:8px 20px 14px}
 }
-`
+/* v2.1: activity tabs, workspace home, workflow board */
+.iw-hidden{display:none !important}
+.iw-workspace-view{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0}
+.iw-tabs{display:flex;gap:3px;padding:2px 10px 8px}
+.iw-tab{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border:1px solid transparent;border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11.5px;cursor:pointer}
+.iw-tab:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2)}
+.iw-tab.active{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-border-l2);font-weight:600}
+.iw-tab-count{min-width:14px;height:14px;padding:0 4px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 18%,transparent);color:var(--dsw-alias-brand-primary);font-size:9.5px;display:inline-flex;align-items:center;justify-content:center}
+.iw-side-tabinfo{padding:12px;display:flex;flex-direction:column;gap:6px}
+.iw-side-tabinfo-title{font-size:12.5px;font-weight:600}
+.iw-side-tabinfo-desc{font-size:11.5px;line-height:1.6;color:var(--dsw-alias-label-secondary)}
+.iw-side-tabinfo-badge{align-self:flex-start;margin-top:2px;padding:1px 7px;border-radius:999px;border:1px dashed var(--dsw-alias-border-l2);font-size:10px;color:var(--dsw-alias-label-secondary)}
+.iw-home{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;flex:1 1 auto;padding:32px 16px;min-height:320px}
+.iw-home-greet{font-size:19px;font-weight:600;letter-spacing:.2px}
+.iw-home-actions{display:flex;gap:12px}
+.iw-home-action{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 22px;border-radius:10px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13.5px;cursor:pointer;transition:all .12s ease}
+.iw-home-action:hover{border-color:var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2)}
+.iw-home-action.primary{border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent);color:var(--dsw-alias-brand-primary)}
+.iw-home-action.primary:hover{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 10%,transparent)}
+.iw-home-action.active{box-shadow:0 0 0 2px color-mix(in srgb,var(--dsw-alias-brand-primary) 22%,transparent)}
+.iw-home-categories{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.iw-home-category{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;cursor:pointer}
+.iw-home-category.ready{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2)}
+.iw-home-category.ready:hover{background:var(--dsw-alias-bg-layer-2)}
+.iw-home-hint{font-size:11.5px;color:var(--dsw-alias-label-secondary);opacity:.85}
+.iw-board{flex:1 1 auto;overflow:auto;padding:20px 24px 28px;display:flex;flex-direction:column;gap:22px}
+.iw-board-head{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.iw-board-title{font-size:16px;font-weight:600}
+.iw-board-sub{flex:1 1 auto;font-size:11.5px;color:var(--dsw-alias-label-secondary)}
+.iw-board-group{display:flex;flex-direction:column;gap:10px}
+.iw-board-group-head{display:flex;align-items:center;gap:8px}
+.iw-board-group-title{font-size:12.5px;font-weight:600}
+.iw-board-group-count{font-size:11px;color:var(--dsw-alias-label-secondary)}
+.iw-workflow-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.iw-workflow-card{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
+.iw-workflow-card:hover{border-color:var(--dsw-alias-border-l2)}
+.iw-workflow-card-head{display:flex;align-items:center;gap:8px;min-width:0}
+.iw-workflow-card-name{flex:1 1 auto;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iw-workflow-card-meta{font-size:11px;color:var(--dsw-alias-label-secondary)}
+.iw-workflow-card-actions{display:flex;gap:6px;flex-wrap:wrap}
+.iw-main-empty{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:48px 20px;color:var(--dsw-alias-label-secondary);text-align:center}
+.iw-main-empty-title{font-size:14px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.iw-main-empty-desc{max-width:420px;font-size:11.5px;line-height:1.7}
+.iw-comfy-category-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.iw-comfy-category-row .iw-param-select{min-width:120px}
+.iw-comfy-category-row .iw-input{flex:1 1 180px}
 
+`
 /* ===== 10-helpers.js ===== */
     /* ------------------------------------------------------------------ */
     /* Generic helpers                                                     */
@@ -627,6 +673,28 @@ window.__ModuleLoader__.load({
     const uid = (prefix) => `${prefix || ''}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
     const cx = (...names) => names.filter(Boolean).join(' ')
     const pad2 = (value) => (value < 10 ? `0${value}` : String(value))
+
+    // v2.1: workflow categories (5 presets + free-form custom names).
+    const WORKFLOW_CATEGORY_ORDER = ['edit', 'image', 'video', 'audio', 'model']
+    const WORKFLOW_CATEGORY_LABELS = {
+      edit: '编辑',
+      image: '生图',
+      video: '生视频',
+      audio: '生音频',
+      model: '生模型',
+    }
+    function workflowCategoryLabel(category) {
+      const value = str(category) || 'image'
+      return WORKFLOW_CATEGORY_LABELS[value] || value
+    }
+    function workflowCategoryRank(category) {
+      const index = WORKFLOW_CATEGORY_ORDER.indexOf(str(category))
+      return index < 0 ? WORKFLOW_CATEGORY_ORDER.length : index
+    }
+    function compareWorkflowCategory(left, right) {
+      const rank = workflowCategoryRank(left) - workflowCategoryRank(right)
+      return rank !== 0 ? rank : str(left).localeCompare(str(right))
+    }
 
     function fmtDate(iso) {
       const date = new Date(iso || '')
@@ -848,6 +916,7 @@ window.__ModuleLoader__.load({
       return {
         id,
         name: str(source.name) || id,
+        category: str(source.category) || 'image',
         paramCount: params.length,
         params,
         createdAt: str(source.createdAt),
@@ -1022,6 +1091,8 @@ window.__ModuleLoader__.load({
           .map((item) => str(item))
           .filter(Boolean),
         suggestedParams: suggested,
+        suggestedCategory: str(inspection.suggestedCategory) || 'image',
+        category: str(opts.category) || str(inspection.suggestedCategory) || 'image',
         selected,
         templates,
         order,
@@ -2131,6 +2202,14 @@ window.__ModuleLoader__.load({
     /* Sidebar: workspaces -> conversations                                */
     /* ------------------------------------------------------------------ */
 
+    // v2.1: sidebar activity tabs (main area follows the active tab).
+    const WORKBENCH_TABS = [
+      { id: 'workspace', label: '工作区', icon: 'folder', title: '工作区与会话' },
+      { id: 'assets', label: '资产库', icon: 'image', title: '资产库（v2.4 上线）' },
+      { id: 'templates', label: '模板', icon: 'spark', title: '提示词模板（v2.2 上线）' },
+      { id: 'workflows', label: '工作流', icon: 'chart', title: 'ComfyUI 工作流管理' },
+    ]
+
     function Sidebar(props) {
       const {
         workspaces,
@@ -2151,6 +2230,9 @@ window.__ModuleLoader__.load({
         onOpenCosts,
         disabled,
         comfyReady,
+        activeTab,
+        onSelectTab,
+        workflowCount,
       } = props
       const [menu, setMenu] = useState(null)
 
@@ -2220,6 +2302,29 @@ window.__ModuleLoader__.load({
         ),
         h(
           'div',
+          { className: 'iw-tabs', role: 'tablist' },
+          WORKBENCH_TABS.map((tab) =>
+            h(
+              'button',
+              {
+                key: tab.id,
+                type: 'button',
+                role: 'tab',
+                'aria-selected': activeTab === tab.id ? 'true' : 'false',
+                className: cx('iw-tab', activeTab === tab.id && 'active'),
+                title: tab.title,
+                onClick: () => onSelectTab(tab.id),
+              },
+              h(Icon, { name: tab.icon, size: 14 }),
+              h('span', { className: 'iw-tab-label' }, tab.label),
+              tab.id === 'workflows' && workflowCount > 0
+                ? h('span', { className: 'iw-tab-count' }, workflowCount)
+                : null,
+            ),
+          ),
+        ),
+        h(
+          'div',
           {
             className: 'iw-side-scroll',
             onScroll: () => {
@@ -2228,7 +2333,7 @@ window.__ModuleLoader__.load({
           },
           h(
             'div',
-            { className: 'iw-side-section' },
+            { className: cx('iw-side-section', activeTab !== 'workspace' && 'iw-hidden') },
             h('div', { className: 'iw-side-section-title' }, '工作区'),
             h(IconButton, {
               name: 'plus',
@@ -2240,7 +2345,7 @@ window.__ModuleLoader__.load({
           list.length === 0
             ? h(
                 'div',
-                { className: 'iw-side-empty' },
+                { className: cx('iw-side-empty', activeTab !== 'workspace' && 'iw-hidden') },
                 h('div', null, '还没有工作区'),
                 h(
                   'button',
@@ -2250,7 +2355,7 @@ window.__ModuleLoader__.load({
               )
             : h(
                 'div',
-                { className: 'iw-ws-list' },
+                { className: cx('iw-ws-list', activeTab !== 'workspace' && 'iw-hidden') },
                 list.map((workspace) => {
                   const isActiveWs = workspace.id === activeWorkspaceId
                   const isOpen = !!expanded[workspace.id]
@@ -2401,6 +2506,42 @@ window.__ModuleLoader__.load({
                 }),
               ),
         ),
+        activeTab !== 'workspace'
+          ? h(
+              'div',
+              { className: 'iw-side-tabinfo' },
+              activeTab === 'workflows'
+                ? h(
+                    'div',
+                    null,
+                    h('div', { className: 'iw-side-tabinfo-title' }, '工作流'),
+                    h(
+                      'div',
+                      { className: 'iw-side-tabinfo-desc' },
+                      '共 ' + (workflowCount || 0) + ' 个工作流。右侧按分类查看、编辑或删除；导入新工作流请打开设置。',
+                    ),
+                  )
+                : null,
+              activeTab === 'assets'
+                ? h(
+                    'div',
+                    null,
+                    h('div', { className: 'iw-side-tabinfo-title' }, '资产库'),
+                    h('div', { className: 'iw-side-tabinfo-desc' }, '跨会话浏览、收藏和复用生成结果。'),
+                    h('div', { className: 'iw-side-tabinfo-badge' }, 'v2.4 上线'),
+                  )
+                : null,
+              activeTab === 'templates'
+                ? h(
+                    'div',
+                    null,
+                    h('div', { className: 'iw-side-tabinfo-title' }, '提示词模板'),
+                    h('div', { className: 'iw-side-tabinfo-desc' }, '保存常用提示词，用 @ 在输入框快速调用。'),
+                    h('div', { className: 'iw-side-tabinfo-badge' }, 'v2.2 上线'),
+                  )
+                : null,
+            )
+          : null,
         h(
           'div',
           { className: 'iw-side-footer' },
@@ -2421,10 +2562,10 @@ window.__ModuleLoader__.load({
               type: 'button',
               className: 'iw-settings-row',
               onClick: onOpenSettings,
-              title: '设置：生图 API / 本机 ComfyUI 工作流',
+              title: '设置：生图 API / 本机 ComfyUI 工作流 / 分类',
             },
             h(Icon, { name: 'gear', size: 14, className: 'iw-settings-gear' }),
-            h('span', { className: 'iw-settings-label' }, 'API 设置'),
+            h('span', { className: 'iw-settings-label' }, '设置'),
             h(
               'span',
               { className: cx('iw-settings-state', (configured || comfyOn) && 'on') },
@@ -2864,6 +3005,7 @@ window.__ModuleLoader__.load({
         conversation,
         conversationLoading,
         activeWorkspace,
+        home,
         models,
         settings,
         jobs,
@@ -2944,7 +3086,8 @@ window.__ModuleLoader__.load({
                 h(Spinner, { size: 18 }),
                 h('span', null, '正在加载会话…'),
               )
-            : h(EmptyState, {
+            : home ||
+              h(EmptyState, {
                 icon: 'message',
                 title: '这个工作区还没有打开的会话',
                 desc: '新建一个会话，或从左侧选择一个已有会话。',
@@ -2953,17 +3096,19 @@ window.__ModuleLoader__.load({
               }),
         )
       } else if (turns.length === 0) {
-        content = h(
-          'div',
-          { className: 'iw-canvas-hint' },
-          h(Icon, { name: 'spark', size: 18 }),
-          h('div', { className: 'iw-canvas-hint-title' }, '开始第一张生成'),
+        content =
+          home ||
           h(
             'div',
-            { className: 'iw-canvas-hint-desc' },
-            '在下方输入画面描述，按 Enter 发送。生成的图片会按时间顺序排列在这里。',
-          ),
-        )
+            { className: 'iw-canvas-hint' },
+            h(Icon, { name: 'spark', size: 18 }),
+            h('div', { className: 'iw-canvas-hint-title' }, '开始第一张生成'),
+            h(
+              'div',
+              { className: 'iw-canvas-hint-desc' },
+              '在下方输入画面描述，按 Enter 发送。生成的图片会按时间顺序排列在这里。',
+            ),
+          )
       } else {
         let groupNo = 0
         const nodes = []
@@ -4092,11 +4237,18 @@ window.__ModuleLoader__.load({
                           label: model.label || model.id,
                         })),
                         ...(workflowList.length
-                          ? workflowList.map((workflow) => ({
-                              value: `${COMFY_PREFIX}${workflow.id}`,
-                              label: `工作流 · ${workflow.name}`,
-                              group: 'ComfyUI 工作流',
-                            }))
+                          ? workflowList
+                              .slice()
+                              .sort(
+                                (left, right) =>
+                                  compareWorkflowCategory(left.category, right.category) ||
+                                  str(left.name).localeCompare(str(right.name)),
+                              )
+                              .map((workflow) => ({
+                                value: `${COMFY_PREFIX}${workflow.id}`,
+                                label: workflow.name,
+                                group: `工作流 · ${workflowCategoryLabel(workflow.category)}`,
+                              }))
                           : [
                               {
                                 value: COMFY_UNCONFIGURED_VALUE,
@@ -5112,6 +5264,7 @@ window.__ModuleLoader__.load({
             buildComfyEditorDraft({
               id: str(workflow.id) || workflowId,
               name: str(workflow.name),
+              category: str(workflow.category),
               json: workflow.json,
               existingParams: Array.isArray(workflow.params) ? workflow.params : [],
               inspection,
@@ -5127,6 +5280,7 @@ window.__ModuleLoader__.load({
       const saveComfyWorkflow = async (payload) => {
         const body = {
           name: str(payload && payload.name).trim(),
+          category: str(payload && payload.category).trim() || 'image',
           params: Array.isArray(payload && payload.params) ? payload.params : [],
         }
         if (payload && payload.id) body.id = str(payload.id)
@@ -6012,6 +6166,7 @@ window.__ModuleLoader__.load({
                       { className: 'iw-comfy-workflow-name', title: workflow.name },
                       workflow.name,
                     ),
+                    h('span', { className: 'iw-tag' }, workflowCategoryLabel(workflow.category)),
                     h('span', { className: 'iw-field-hint' }, `${workflow.paramCount} 个参数`),
                     h(
                       'span',
@@ -6099,6 +6254,18 @@ window.__ModuleLoader__.load({
     function ComfyParamEditor(props) {
       const draft = isObj(props.draft) ? props.draft : {}
       const [name, setName] = useState(() => str(draft.name))
+      // v2.1: fixed 5 presets + free-form custom category name.
+      const initialCategory = str(draft.category) || str(draft.suggestedCategory) || 'image'
+      const initialIsPreset = WORKFLOW_CATEGORY_ORDER.indexOf(initialCategory) >= 0
+      const [category, setCategory] = useState(initialIsPreset ? initialCategory : '__custom__')
+      const [customCategory, setCustomCategory] = useState(initialIsPreset ? '' : initialCategory)
+      const categoryOptions = [
+        ...WORKFLOW_CATEGORY_ORDER.map((id) => ({
+          value: id,
+          label: WORKFLOW_CATEGORY_LABELS[id] || id,
+        })),
+        { value: '__custom__', label: '自定义…' },
+      ]
       const [selected, setSelected] = useState(() =>
         isObj(draft.selected) ? { ...draft.selected } : {},
       )
@@ -6340,7 +6507,20 @@ window.__ModuleLoader__.load({
         setBusy(true)
         setError('')
         try {
-          await props.onSave({ id: str(draft.id), json: draft.json, name: trimmedName, params })
+          const effectiveCategory =
+            category === '__custom__' ? str(customCategory).trim() : str(category)
+          if (!effectiveCategory) {
+            setError('请填写工作流分类')
+            setBusy(false)
+            return
+          }
+          await props.onSave({
+            id: str(draft.id),
+            json: draft.json,
+            name: trimmedName,
+            category: effectiveCategory,
+            params,
+          })
           if (props.onDone) props.onDone()
         } catch (failure) {
           setError((failure && failure.message) || String(failure))
@@ -6689,6 +6869,30 @@ window.__ModuleLoader__.load({
             disabled: busy,
             onChange: (event) => setName(event.target.value),
           }),
+        ),
+        h(
+          Field,
+          { label: '分类' },
+          h(
+            'div',
+            { className: 'iw-comfy-category-row' },
+            h(Select, {
+              className: 'iw-param-select',
+              value: category,
+              options: categoryOptions,
+              disabled: busy,
+              onChange: (value) => setCategory(value),
+            }),
+            category === '__custom__'
+              ? h('input', {
+                  className: 'iw-input',
+                  value: customCategory,
+                  placeholder: '自定义分类名，例如「3D 场景」',
+                  disabled: busy,
+                  onChange: (event) => setCustomCategory(event.target.value),
+                })
+              : null,
+          ),
         ),
         h(
           'div',
@@ -7494,6 +7698,227 @@ window.__ModuleLoader__.load({
     /* Workbench (state container)                                         */
     /* ------------------------------------------------------------------ */
 
+    function greetingText() {
+      const hour = new Date().getHours()
+      if (hour < 5) return '夜深了'
+      if (hour < 11) return '早上好'
+      if (hour < 14) return '中午好'
+      if (hour < 18) return '下午好'
+      if (hour < 23) return '晚上好'
+      return '夜深了'
+    }
+
+    /**
+     * v2.1: workspace home. Shows a greeting + 「编辑 / 生成」intent picker when
+     * the conversation is empty; choosing a category pre-selects the newest
+     * workflow of that category (or the first API model for image) and focuses
+     * the composer.
+     */
+    function HomeHero(props) {
+      const [expanded, setExpanded] = useState(false)
+      const workflows = Array.isArray(props.workflows) ? props.workflows : []
+      const models = Array.isArray(props.models) ? props.models : []
+      const countOf = (category) =>
+        workflows.filter((workflow) => str(workflow.category) === category).length
+      const categories = [
+        { id: 'image', label: '生成图片', icon: 'image', ok: countOf('image') > 0 || models.length > 0 },
+        { id: 'video', label: '生成视频', icon: 'chart', ok: countOf('video') > 0 },
+        { id: 'audio', label: '生成声音', icon: 'dots', ok: countOf('audio') > 0 },
+        { id: 'model', label: '生成模型', icon: 'folder', ok: countOf('model') > 0 },
+      ]
+      return h(
+        'div',
+        { className: 'iw-home' },
+        h('div', { className: 'iw-home-greet' }, `${greetingText()}~ 现在想干什么呀？`),
+        h(
+          'div',
+          { className: 'iw-home-actions' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'iw-home-action',
+              title: '从一张图开始编辑（后续版本支持参考图输入）',
+              onClick: () => props.onEdit(),
+            },
+            h(Icon, { name: 'pencil', size: 15 }),
+            h('span', null, '编辑'),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: cx('iw-home-action', 'primary', expanded && 'active'),
+              title: '选择生成类型',
+              onClick: () => setExpanded((value) => !value),
+            },
+            h(Icon, { name: 'spark', size: 15 }),
+            h('span', null, '生成'),
+          ),
+        ),
+        expanded
+          ? h(
+              'div',
+              { className: 'iw-home-categories' },
+              categories.map((category) =>
+                h(
+                  'button',
+                  {
+                    key: category.id,
+                    type: 'button',
+                    className: cx('iw-home-category', category.ok && 'ready'),
+                    title: category.ok
+                      ? `使用「${workflowCategoryLabel(category.id)}」分类的工作流或模型`
+                      : '该分类还没有工作流，点击去设置导入',
+                    onClick: () =>
+                      category.ok ? props.onGenerate(category.id) : props.onOpenSettings(),
+                  },
+                  h(Icon, { name: category.icon, size: 13 }),
+                  h('span', null, category.label),
+                ),
+              ),
+            )
+          : null,
+        h(
+          'div',
+          { className: 'iw-home-hint' },
+          '也可以直接在下方输入框描述，按 Enter 发送',
+        ),
+      )
+    }
+
+
+    /** v2.1: full-page workflow manager grouped by category. */
+    function WorkflowBoard(props) {
+      const workflows = Array.isArray(props.workflows) ? props.workflows : []
+      const byCategory = new Map()
+      for (const workflow of workflows) {
+        const category = str(workflow.category) || 'image'
+        if (!byCategory.has(category)) byCategory.set(category, [])
+        byCategory.get(category).push(workflow)
+      }
+      const categories = [...byCategory.keys()].sort(compareWorkflowCategory)
+      return h(
+        'div',
+        { className: 'iw-board' },
+        h(
+          'div',
+          { className: 'iw-board-head' },
+          h('div', { className: 'iw-board-title' }, '工作流'),
+          h(
+            'div',
+            { className: 'iw-board-sub' },
+            `共 ${workflows.length} 个，按分类分组。编辑参数、导入新工作流都在设置里。`,
+          ),
+          h(
+            'button',
+            { type: 'button', className: 'iw-btn', onClick: props.onOpenSettings },
+            h(Icon, { name: 'plus', size: 13 }),
+            '导入 / 管理',
+          ),
+        ),
+        workflows.length === 0
+          ? h(
+              'div',
+              { className: 'iw-main-empty' },
+              h(Icon, { name: 'chart', size: 30 }),
+              h('div', { className: 'iw-main-empty-title' }, '还没有工作流'),
+              h(
+                'div',
+                { className: 'iw-main-empty-desc' },
+                '在设置 → ComfyUI 里导入 API 格式的工作流，并选择它的分类。',
+              ),
+              h(
+                'button',
+                { type: 'button', className: 'iw-home-action primary', onClick: props.onOpenSettings },
+                '打开设置',
+              ),
+            )
+          : categories.map((category) => {
+              const list = byCategory.get(category) || []
+              return h(
+                'section',
+                { key: category, className: 'iw-board-group' },
+                h(
+                  'div',
+                  { className: 'iw-board-group-head' },
+                  h('span', { className: 'iw-board-group-title' }, workflowCategoryLabel(category)),
+                  h('span', { className: 'iw-board-group-count' }, `${list.length} 个`),
+                ),
+                h(
+                  'div',
+                  { className: 'iw-workflow-grid' },
+                  list.map((workflow) =>
+                    h(
+                      'div',
+                      { key: workflow.id, className: 'iw-workflow-card' },
+                      h(
+                        'div',
+                        { className: 'iw-workflow-card-head' },
+                        h(
+                          'span',
+                          { className: 'iw-workflow-card-name', title: workflow.name },
+                          workflow.name,
+                        ),
+                        h('span', { className: 'iw-tag' }, workflowCategoryLabel(workflow.category)),
+                      ),
+                      h(
+                        'div',
+                        { className: 'iw-workflow-card-meta' },
+                        `${workflow.paramCount || 0} 个参数 · 更新于 ${
+                          workflow.updatedAt ? fmtRelative(workflow.updatedAt) : '—'
+                        }`,
+                      ),
+                      h(
+                        'div',
+                        { className: 'iw-workflow-card-actions' },
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'iw-btn',
+                            onClick: () => props.onUse(workflow.id),
+                          },
+                          '使用',
+                        ),
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'iw-btn',
+                            onClick: () => props.onEditWorkflow(workflow.id),
+                          },
+                          '编辑参数',
+                        ),
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'iw-btn danger',
+                            onClick: () => props.onDelete(workflow),
+                          },
+                          '删除',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            }),
+      )
+    }
+
+    function ComingSoon(props) {
+      return h(
+        'div',
+        { className: 'iw-main-empty' },
+        h(Icon, { name: props.icon || 'spark', size: 30 }),
+        h('div', { className: 'iw-main-empty-title' }, props.title),
+        h('div', { className: 'iw-main-empty-desc' }, props.desc),
+        props.badge ? h('div', { className: 'iw-side-tabinfo-badge' }, props.badge) : null,
+      )
+    }
+
     function Workbench() {
       // P2-02: lazier localStorage read — passing loadUiState() to useRef would
       // evaluate it on every render (a getItem + JSON.parse per keystroke).
@@ -7520,6 +7945,13 @@ window.__ModuleLoader__.load({
       // v1.2: local ComfyUI workflow list (model dropdown + dynamic params).
       const [workflows, setWorkflows] = useState([])
       const [workflowsLoaded, setWorkflowsLoaded] = useState(false)
+      // v2.1: sidebar activity tab; the main area follows it.
+      const [activeTab, setActiveTab] = useState(() => {
+        const storedTab = str(storedUiRef.current.activeTab)
+        return ['workspace', 'assets', 'templates', 'workflows'].indexOf(storedTab) >= 0
+          ? storedTab
+          : 'workspace'
+      })
       const [uploading, setUploading] = useState(false)
       const [sending, setSending] = useState(false)
       const [jobs, setJobs] = useState([])
@@ -7927,12 +8359,13 @@ window.__ModuleLoader__.load({
             activeConversationId,
             expanded,
             params,
+            activeTab,
             drafts: draftRef.current,
             conversationParams: convParamsRef.current,
           })
         }, 150)
         return () => clearTimeout(timer)
-      }, [boot.status, activeWorkspaceId, activeConversationId, expanded, params, prompt])
+      }, [boot.status, activeWorkspaceId, activeConversationId, expanded, params, prompt, activeTab])
 
       // v1.2: a persisted comfy:<id> selection must be validated against the
       // loaded workflow list — if that workflow vanished, fall back to a model.
@@ -8580,6 +9013,123 @@ window.__ModuleLoader__.load({
         }
       }
 
+      /** v2.1: switch the composer to a ComfyUI workflow and focus the input. */
+      async function applyComfyWorkflowId(workflowId) {
+        const id = str(workflowId)
+        if (!id) return
+        const workflow =
+          findWorkflowById(workflowsRef.current, id) || findWorkflowById(workflows, id)
+        if (!workflow) {
+          pushToast('error', '工作流不存在或已删除')
+          return
+        }
+        setActiveTab('workspace')
+        setParams((previous) => ({
+          ...previous,
+          model: `comfy:${workflow.id}`,
+          workflowId: workflow.id,
+          workflowParams: {},
+          workflowRandomize: {},
+          n: 1,
+        }))
+        if (!activeConvRef.current && activeWsRef.current) {
+          try {
+            await createConversation(activeWsRef.current)
+          } catch (error) {
+            // conversation creation errors already surface through the toast path
+          }
+        }
+        setTimeout(() => {
+          const textarea = textareaRef.current
+          if (textarea && typeof textarea.focus === 'function') textarea.focus()
+        }, 60)
+      }
+
+      function pickWorkflowForCategory(category) {
+        const list = (workflowsRef.current || []).filter(
+          (item) => str(item.category) === category,
+        )
+        if (!list.length) return null
+        return list
+          .slice()
+          .sort((left, right) => str(right.updatedAt).localeCompare(str(left.updatedAt)))[0]
+      }
+
+      /** v2.1 home hero: 「生成图片 / 视频 / 声音 / 模型」. */
+      function handleHomeGenerate(category) {
+        const picked = pickWorkflowForCategory(category)
+        if (picked) {
+          void applyComfyWorkflowId(picked.id)
+          return
+        }
+        if (category === 'image') {
+          const models = settings && Array.isArray(settings.models) ? settings.models : []
+          if (models.length) {
+            setActiveTab('workspace')
+            setParams((previous) => ({
+              ...previous,
+              model: models[0].id,
+              workflowId: '',
+              workflowParams: {},
+            }))
+            setTimeout(() => {
+              const textarea = textareaRef.current
+              if (textarea && typeof textarea.focus === 'function') textarea.focus()
+            }, 60)
+            return
+          }
+        }
+        pushToast('info', `「${workflowCategoryLabel(category)}」分类还没有工作流，先去设置导入`)
+        setSettingsOpen(true)
+      }
+
+      /** v2.1 home hero: 「编辑」→ 选一张编辑类工作流（参考图选择在 v2.4）。 */
+      function handleHomeEdit() {
+        const picked = pickWorkflowForCategory('edit')
+        if (!picked) {
+          pushToast('info', '还没有「编辑」类工作流，先去设置导入并设置分类')
+          setSettingsOpen(true)
+          return
+        }
+        void applyComfyWorkflowId(picked.id)
+        pushToast('info', '已选择编辑工作流；参考图输入将在后续版本开放')
+      }
+
+      async function handleWorkflowDelete(workflow) {
+        const id = str(workflow && workflow.id)
+        if (!id) return
+        let confirmed = true
+        try {
+          confirmed =
+            typeof window.confirm === 'function'
+              ? window.confirm(
+                  `确定删除工作流「${str(workflow.name) || '未命名工作流'}」？此操作不可恢复。`,
+                )
+              : true
+        } catch (error) {
+          confirmed = true
+        }
+        if (!confirmed) return
+        try {
+          await rpc('comfy.workflow.delete', { id })
+          pushToast('success', '工作流已删除')
+          if (
+            isComfyModel(paramsRef.current.model) &&
+            comfyWorkflowIdOf(paramsRef.current.model) === id
+          ) {
+            setParams((previous) => ({
+              ...previous,
+              model: '',
+              workflowId: '',
+              workflowParams: {},
+            }))
+          }
+          await loadWorkflows()
+        } catch (error) {
+          pushToast('error', `删除失败：${(error && error.message) || error}`)
+        }
+      }
+
       /**
        * v1.1: stop a running turn that has no resumable jobId (old data or a
        * host restart dropped the in-memory job). Host reconciles the persisted
@@ -9019,6 +9569,18 @@ window.__ModuleLoader__.load({
 
       const activeWorkspace =
         workspaces.find((workspace) => workspace.id === activeWorkspaceId) || null
+      const conversationTurns =
+        conversation && Array.isArray(conversation.turns) ? conversation.turns : []
+      const homeNode =
+        !conversationLoading && conversationTurns.length === 0
+          ? h(HomeHero, {
+              workflows,
+              models: settings ? settings.models : [],
+              onGenerate: handleHomeGenerate,
+              onEdit: handleHomeEdit,
+              onOpenSettings: () => setSettingsOpen(true),
+            })
+          : null
       const dial = resolveDialect(params.model, settings ? settings.models : [])
       const activeJobs = jobs.filter(
         (job) =>
@@ -9104,6 +9666,9 @@ window.__ModuleLoader__.load({
                 h(
                   'div',
                   { className: 'iw-main' },
+                  h(
+                    'div',
+                    { className: cx('iw-workspace-view', activeTab !== 'workspace' && 'iw-hidden') },
                   h(Topbar, {
                     activeWorkspace,
                     conversation,
@@ -9114,6 +9679,7 @@ window.__ModuleLoader__.load({
                     onOpenTasks: () => setTaskPanelOpen(true),
                   }),
                   h(Canvas, {
+                    home: homeNode,
                     conversation,
                     conversationLoading,
                     activeWorkspace,
@@ -9159,6 +9725,32 @@ window.__ModuleLoader__.load({
                     onToast: pushToast,
                     onClearRefs: () => setRefs([]),
                   }),
+                  ),
+                  activeTab === 'workflows'
+                    ? h(WorkflowBoard, {
+                        workflows,
+                        onUse: (id) => void applyComfyWorkflowId(id),
+                        onEditWorkflow: () => setSettingsOpen(true),
+                        onDelete: handleWorkflowDelete,
+                        onOpenSettings: () => setSettingsOpen(true),
+                      })
+                    : null,
+                  activeTab === 'assets'
+                    ? h(ComingSoon, {
+                        icon: 'image',
+                        title: '资产库',
+                        desc: '跨会话浏览、收藏与复用生成结果。',
+                        badge: 'v2.4 上线',
+                      })
+                    : null,
+                  activeTab === 'templates'
+                    ? h(ComingSoon, {
+                        icon: 'spark',
+                        title: '提示词模板',
+                        desc: '保存常用提示词，用 @ 在输入框快速调用。',
+                        badge: 'v2.2 上线',
+                      })
+                    : null,
                 ),
               )
 

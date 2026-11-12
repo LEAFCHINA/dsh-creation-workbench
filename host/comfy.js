@@ -58,6 +58,25 @@ export const COMFY_LIMITS = {
   maxParams: 60,
 }
 
+/** v2.1: workflow category (5 presets + free-form custom names). */
+export const WORKFLOW_CATEGORIES = ['edit', 'image', 'video', 'audio', 'model']
+
+function normalizeCategory(raw, fallback = 'image') {
+  const value = typeof raw === 'string' ? raw.trim().slice(0, 40) : ''
+  return value || fallback
+}
+
+/** Heuristic category suggestion from the workflow's node class types. */
+function classifyWorkflowClasses(types) {
+  const list = [...(types instanceof Set ? types : new Set(types || []))]
+  const has = (pattern) => list.some((type) => pattern.test(String(type || '')))
+  if (has(/Save(Video|WEBM|MP4)|VHS_VideoCombine|VideoCombine|SaveAnimation/i)) return 'video'
+  if (has(/SaveAudio|AudioSave|TTS|Voice|MusicGen|SaveSound|Audio/i)) return 'audio'
+  if (has(/SaveGLB|SaveOBJ|SavePLY|Save3D|SaveMesh|TripoSR|Hunyuan3D|InstantMesh|Mesh/i)) return 'model'
+  if (has(/Inpaint|SetLatentNoiseMask|LoadImage|ImageToImage|Img2Img|VaeEncode/i)) return 'edit'
+  return 'image'
+}
+
 const STATUS_TIMEOUT_MS = 10000
 const OBJECT_INFO_TIMEOUT_MS = 30000
 const QUEUE_TIMEOUT_MS = 8000
@@ -557,7 +576,15 @@ function normalizeStoredWorkflow(item) {
       }
     }
   }
-  return { id: item.id, name, createdAt, updatedAt, json: item.json, params }
+  return {
+    id: item.id,
+    name,
+    createdAt,
+    updatedAt,
+    category: normalizeCategory(item.category),
+    json: item.json,
+    params,
+  }
 }
 
 async function readWorkflowFile() {
@@ -584,6 +611,7 @@ function stripWorkflow(workflow) {
   return {
     id: workflow.id,
     name: workflow.name,
+    category: workflow.category || 'image',
     paramCount: Array.isArray(workflow.params) ? workflow.params.length : 0,
     params: cloneParams(workflow.params),
     createdAt: workflow.createdAt,
@@ -612,6 +640,7 @@ export async function getWorkflow(id) {
     workflow: {
       id: found.id,
       name: found.name,
+      category: found.category || 'image',
       createdAt: found.createdAt,
       updatedAt: found.updatedAt,
       json: found.json,
@@ -620,13 +649,14 @@ export async function getWorkflow(id) {
   }
 }
 
-export async function saveWorkflow({ id, name, json, params } = {}) {
+export async function saveWorkflow({ id, name, json, params, category } = {}) {
   const idProvided = id !== undefined && id !== null && id !== ''
   if (idProvided && !isWorkflowId(id)) throw new ApiError('工作流 ID 无效', 'INVALID_REQUEST', 400)
   const cleanName = assertNonEmptyString(name, '工作流名称', { max: 100 })
   const cleanJson = json === undefined || json === null ? null : assertWorkflowSize(parseWorkflowJson(json))
   const hasParams = params !== undefined && params !== null
   const cleanParams = hasParams ? normalizeParamsInput(params) : null
+  const cleanCategory = typeof category === 'string' && category.trim() ? normalizeCategory(category) : null
   return store.withLock('workflows', async () => {
     const data = await readWorkflowFile()
     const now = nowIso()
@@ -639,6 +669,7 @@ export async function saveWorkflow({ id, name, json, params } = {}) {
       const next = {
         ...current,
         name: cleanName,
+        category: cleanCategory || current.category || 'image',
         updatedAt: now,
         json: cleanJson || current.json,
         params: cleanParams || current.params,
@@ -659,6 +690,7 @@ export async function saveWorkflow({ id, name, json, params } = {}) {
     const workflow = {
       id: workflowId,
       name: cleanName,
+      category: cleanCategory || 'image',
       createdAt: now,
       updatedAt: now,
       json: cleanJson,
@@ -889,7 +921,13 @@ export async function inspectWorkflow({ json, baseUrl } = {}) {
     warnings.push('未检测到图片输出节点（SaveImage / PreviewImage），生成时可能拿不到图片')
   }
 
-  return { nodes, outputs, suggestedParams, warnings }
+  return {
+    nodes,
+    outputs,
+    suggestedParams,
+    suggestedCategory: classifyWorkflowClasses(classTypes),
+    warnings,
+  }
 }
 
 /* ------------------------------------------------------------------ */

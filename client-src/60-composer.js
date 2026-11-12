@@ -535,11 +535,18 @@
                           label: model.label || model.id,
                         })),
                         ...(workflowList.length
-                          ? workflowList.map((workflow) => ({
-                              value: `${COMFY_PREFIX}${workflow.id}`,
-                              label: `工作流 · ${workflow.name}`,
-                              group: 'ComfyUI 工作流',
-                            }))
+                          ? workflowList
+                              .slice()
+                              .sort(
+                                (left, right) =>
+                                  compareWorkflowCategory(left.category, right.category) ||
+                                  str(left.name).localeCompare(str(right.name)),
+                              )
+                              .map((workflow) => ({
+                                value: `${COMFY_PREFIX}${workflow.id}`,
+                                label: workflow.name,
+                                group: `工作流 · ${workflowCategoryLabel(workflow.category)}`,
+                              }))
                           : [
                               {
                                 value: COMFY_UNCONFIGURED_VALUE,

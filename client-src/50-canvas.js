@@ -425,6 +425,7 @@
         conversation,
         conversationLoading,
         activeWorkspace,
+        home,
         models,
         settings,
         jobs,
@@ -505,7 +506,8 @@
                 h(Spinner, { size: 18 }),
                 h('span', null, '正在加载会话…'),
               )
-            : h(EmptyState, {
+            : home ||
+              h(EmptyState, {
                 icon: 'message',
                 title: '这个工作区还没有打开的会话',
                 desc: '新建一个会话，或从左侧选择一个已有会话。',
@@ -514,17 +516,19 @@
               }),
         )
       } else if (turns.length === 0) {
-        content = h(
-          'div',
-          { className: 'iw-canvas-hint' },
-          h(Icon, { name: 'spark', size: 18 }),
-          h('div', { className: 'iw-canvas-hint-title' }, '开始第一张生成'),
+        content =
+          home ||
           h(
             'div',
-            { className: 'iw-canvas-hint-desc' },
-            '在下方输入画面描述，按 Enter 发送。生成的图片会按时间顺序排列在这里。',
-          ),
-        )
+            { className: 'iw-canvas-hint' },
+            h(Icon, { name: 'spark', size: 18 }),
+            h('div', { className: 'iw-canvas-hint-title' }, '开始第一张生成'),
+            h(
+              'div',
+              { className: 'iw-canvas-hint-desc' },
+              '在下方输入画面描述，按 Enter 发送。生成的图片会按时间顺序排列在这里。',
+            ),
+          )
       } else {
         let groupNo = 0
         const nodes = []

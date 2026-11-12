@@ -12,6 +12,28 @@
     const cx = (...names) => names.filter(Boolean).join(' ')
     const pad2 = (value) => (value < 10 ? `0${value}` : String(value))
 
+    // v2.1: workflow categories (5 presets + free-form custom names).
+    const WORKFLOW_CATEGORY_ORDER = ['edit', 'image', 'video', 'audio', 'model']
+    const WORKFLOW_CATEGORY_LABELS = {
+      edit: '编辑',
+      image: '生图',
+      video: '生视频',
+      audio: '生音频',
+      model: '生模型',
+    }
+    function workflowCategoryLabel(category) {
+      const value = str(category) || 'image'
+      return WORKFLOW_CATEGORY_LABELS[value] || value
+    }
+    function workflowCategoryRank(category) {
+      const index = WORKFLOW_CATEGORY_ORDER.indexOf(str(category))
+      return index < 0 ? WORKFLOW_CATEGORY_ORDER.length : index
+    }
+    function compareWorkflowCategory(left, right) {
+      const rank = workflowCategoryRank(left) - workflowCategoryRank(right)
+      return rank !== 0 ? rank : str(left).localeCompare(str(right))
+    }
+
     function fmtDate(iso) {
       const date = new Date(iso || '')
       if (isNaN(date.getTime())) return ''
@@ -232,6 +254,7 @@
       return {
         id,
         name: str(source.name) || id,
+        category: str(source.category) || 'image',
         paramCount: params.length,
         params,
         createdAt: str(source.createdAt),
@@ -406,6 +429,8 @@
           .map((item) => str(item))
           .filter(Boolean),
         suggestedParams: suggested,
+        suggestedCategory: str(inspection.suggestedCategory) || 'image',
+        category: str(opts.category) || str(inspection.suggestedCategory) || 'image',
         selected,
         templates,
         order,

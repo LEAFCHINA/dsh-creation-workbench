@@ -30,7 +30,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-12-host-23'
+export const HOST_BUILD = '2026-11-13-host-24'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -350,6 +350,7 @@ async function dispatchOp(payload, env) {
       return comfy.saveWorkflow({
         id: payload.id,
         name: payload.name,
+        category: payload.category,
         json: payload.json,
         params: payload.params,
       })
