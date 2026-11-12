@@ -60,6 +60,8 @@ export const COMFY_LIMITS = {
 
 const STATUS_TIMEOUT_MS = 10000
 const OBJECT_INFO_TIMEOUT_MS = 30000
+const QUEUE_TIMEOUT_MS = 8000
+const QUEUE_PROBE_INTERVAL_MS = 1600
 const POLL_INTERVAL_MS = 800
 const OBJECT_INFO_TTL_MS = 5 * 60 * 1000
 const MAX_SUGGESTED_PARAMS = 8
@@ -270,6 +272,55 @@ export async function comfyStatus(settings) {
   } catch (error) {
     if (error?.name === 'AbortError') {
       return { ok: false, baseUrl, error: `连接 ComfyUI 超时（${Math.round(STATUS_TIMEOUT_MS / 1000)} 秒）` }
+    }
+    return { ok: false, baseUrl, error: String(error?.message || error) }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* /queue — live queue snapshot (v1.2.6)                               */
+/* ------------------------------------------------------------------ */
+
+/** ComfyUI queue rows are `[number, prompt_id, prompt, extra_data, …]`. */
+function summarizeQueueList(list) {
+  const out = []
+  if (!Array.isArray(list)) return out
+  for (const item of list) {
+    if (!Array.isArray(item)) continue
+    const promptId = typeof item[1] === 'string' ? item[1] : ''
+    if (!promptId) continue
+    out.push({ promptId, number: Number.isFinite(Number(item[0])) ? Number(item[0]) : null })
+  }
+  return out
+}
+
+/**
+ * Read ComfyUI's current queue. Never throws — returns `{ ok:false, error }`.
+ * Used by the `comfy.queue` RPC and by the in-generation probe that feeds
+ * `job.get` with `stage` / `queuePosition`.
+ */
+export async function readQueue(settings) {
+  const baseUrl = store.normalizeComfyBaseUrl(settings?.comfyBaseUrl)
+  if (!baseUrl) return { ok: false, baseUrl: '', error: '尚未配置 ComfyUI 服务地址' }
+  try {
+    const result = await comfyRequest(baseUrl, { path: '/queue', timeoutMs: QUEUE_TIMEOUT_MS })
+    if (!result.ok) {
+      return { ok: false, baseUrl, error: `ComfyUI 返回异常（HTTP ${result.status}）` }
+    }
+    const data = isPlainObject(result.data) ? result.data : {}
+    const running = summarizeQueueList(data.queue_running)
+    const pending = summarizeQueueList(data.queue_pending)
+    return {
+      ok: true,
+      baseUrl,
+      running,
+      pending,
+      runningCount: running.length,
+      pendingCount: pending.length,
+    }
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      return { ok: false, baseUrl, error: '查询 ComfyUI 队列超时' }
     }
     return { ok: false, baseUrl, error: String(error?.message || error) }
   }
@@ -998,8 +1049,38 @@ function describeHistoryError(entry) {
   return `ComfyUI 工作流执行失败：${truncate(summary, 500)}`
 }
 
-async function waitForHistory(baseUrl, promptId, { signal, timeoutMs, onProgress }) {
+async function waitForHistory(baseUrl, promptId, { signal, timeoutMs, onProgress, onQueue }) {
   let runningNotified = false
+  let lastQueueProbe = 0
+  let lastQueueSignature = ''
+
+  const probeQueue = async () => {
+    if (typeof onQueue !== 'function') return
+    const now = Date.now()
+    if (now - lastQueueProbe < QUEUE_PROBE_INTERVAL_MS) return
+    lastQueueProbe = now
+    try {
+      const result = await comfyRequest(baseUrl, { path: '/queue', timeoutMs: QUEUE_TIMEOUT_MS })
+      if (!result.ok || !isPlainObject(result.data)) return
+      const running = summarizeQueueList(result.data.queue_running)
+      const pending = summarizeQueueList(result.data.queue_pending)
+      const isRunning = running.some((item) => item.promptId === promptId)
+      const pendingIndex = pending.findIndex((item) => item.promptId === promptId)
+      const info = {
+        state: isRunning ? 'running' : 'queued',
+        position: pendingIndex >= 0 ? pendingIndex + 1 : null,
+        runningCount: running.length,
+        pendingCount: pending.length,
+      }
+      const signature = `${info.state}:${info.position}:${info.runningCount}:${info.pendingCount}`
+      if (signature === lastQueueSignature) return
+      lastQueueSignature = signature
+      onQueue(info)
+    } catch {
+      // The queue probe is best effort: history polling is the source of truth.
+    }
+  }
+
   for (;;) {
     if (signal?.aborted) throw makeAbortError()
     const result = await comfyRequest(baseUrl, {
@@ -1015,7 +1096,12 @@ async function waitForHistory(baseUrl, promptId, { signal, timeoutMs, onProgress
     if (isPlainObject(entry)) {
       const status = isPlainObject(entry.status) ? entry.status : {}
       const statusStr = String(status.status_str || '')
-      if (status.completed === true || statusStr === 'success') return entry
+      if (status.completed === true || statusStr === 'success') {
+        if (typeof onQueue === 'function') {
+          onQueue({ state: 'done', position: null, runningCount: 0, pendingCount: 0 })
+        }
+        return entry
+      }
       if (statusStr === 'error') throw new ApiError(describeHistoryError(entry), 'COMFY_NODE_ERROR', 400)
       if (!runningNotified) {
         runningNotified = true
@@ -1026,6 +1112,7 @@ async function waitForHistory(baseUrl, promptId, { signal, timeoutMs, onProgress
       runningNotified = true
       if (onProgress) onProgress(0.6)
     }
+    await probeQueue()
     await sleep(POLL_INTERVAL_MS, signal)
   }
 }
@@ -1126,7 +1213,7 @@ function normalizeGenerationCount(value) {
  *   { model:'comfy:wf_…', n, workflowId, workflowParams, displayName }
  * Returns `{ dialect:'comfyui', mode:'workflow', images:[{bytes,mime,w,h}] }`.
  */
-export async function generateImages({ settings, params, prompt, refs, signal, onProgress }) {
+export async function generateImages({ settings, params, prompt, refs, signal, onProgress, onQueue }) {
   const baseUrl = store.normalizeComfyBaseUrl(settings?.comfyBaseUrl)
   if (!baseUrl) throw new ApiError('尚未配置 ComfyUI 服务地址，请先在设置中填写', 'INVALID_REQUEST', 400)
   if (Array.isArray(refs) && refs.length > 0) {
@@ -1216,7 +1303,7 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
       if (onProgress) onProgress(0.3)
       let historyEntry
       try {
-        historyEntry = await waitForHistory(baseUrl, promptId, { signal, timeoutMs, onProgress })
+        historyEntry = await waitForHistory(baseUrl, promptId, { signal, timeoutMs, onProgress, onQueue })
       } catch (error) {
         if (error?.name === 'AbortError') await cancelRemotePrompt(baseUrl, promptId)
         throw error

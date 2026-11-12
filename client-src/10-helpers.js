@@ -827,10 +827,18 @@
       if (!isObj(job)) return '生成中…'
       const status = str(job.status) || 'running'
       const pct = Math.round(clamp(num(job.progress, 0), 0, 1) * 100)
-      if (status === 'queued') return '排队中…'
+      const position =
+        typeof job.queuePosition === 'number' && job.queuePosition > 0 ? job.queuePosition : null
+      if (status === 'queued') return position ? `排队第 ${position} 位` : '排队中…'
       if (status === 'done') return '已完成'
       const label = JOB_STATUS_LABEL[status] || '生成中'
-      return status === 'running' ? `${label} · ${pct}%` : label
+      if (status === 'running') {
+        if (str(job.stage) === 'queued') {
+          return position ? `排队第 ${position} 位` : `${label} · 等待 ComfyUI`
+        }
+        return `${label} · ${pct}%`
+      }
+      return label
     }
 
     /* ------------------------------------------------------------------ */

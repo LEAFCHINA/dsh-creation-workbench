@@ -97,12 +97,25 @@ function jobView(job) {
     if (typeof job.params.workflowId === 'string' && job.params.workflowId) {
       view.workflowId = job.params.workflowId
     }
+    view.model = String(job.params.model || '')
+    view.displayName = String(job.params.displayName || '')
     if (
       isPlainObject(job.params.workflowRandomValues) &&
       Object.keys(job.params.workflowRandomValues).length > 0
     ) {
       view.randomValues = { ...job.params.workflowRandomValues }
     }
+  }
+  // v1.2.6: ComfyUI queue position / stage for the progress line + task panel.
+  if (isPlainObject(job.queue)) {
+    if (typeof job.queue.state === 'string' && job.queue.state) view.stage = job.queue.state
+    if (typeof job.queue.position === 'number' && job.queue.position > 0) {
+      view.queuePosition = job.queue.position
+    }
+    view.queueRunning = Number(job.queue.runningCount) || 0
+    view.queuePending = Number(job.queue.pendingCount) || 0
+  } else if (job.status === 'queued') {
+    view.stage = 'queued'
   }
   if (job.error) {
     view.error = job.error
@@ -152,6 +165,34 @@ export function cancelJob(jobId) {
     }
   }
   return { ok: true }
+}
+
+/**
+ * v1.2.6: active jobs across ALL conversations, for the cross-session task
+ * panel. Terminal jobs are omitted — the conversation itself is their record.
+ */
+export function listJobs() {
+  const items = []
+  for (const job of STATE.jobs.values()) {
+    if (TERMINAL.has(job.status)) continue
+    const view = jobView(job)
+    view.workspaceId = job.workspaceId
+    view.conversationId = job.conversationId
+    view.createdAt = job.createdAt
+    view.prompt = truncate(String(job.prompt || ''), 80)
+    items.push(view)
+  }
+  items.sort((left, right) => {
+    const a = Date.parse(String(left.createdAt || ''))
+    const b = Date.parse(String(right.createdAt || ''))
+    if (Number.isFinite(a) && Number.isFinite(b) && a !== b) return a - b
+    return String(left.jobId).localeCompare(String(right.jobId))
+  })
+  return {
+    jobs: items,
+    running: items.filter((item) => item.status === 'running').length,
+    queued: items.filter((item) => item.status === 'queued').length,
+  }
 }
 
 /** Allocate a job id up-front so `generate` can persist turn.jobId before responding. */
@@ -221,6 +262,9 @@ export function enqueueGeneration({ workspaceId, conversationId, turn, params, p
     progress: 0,
     error: null,
     errorCode: null,
+    // v1.2.6: live ComfyUI queue state ({state,'queued'|'running'|'done',
+    // position, runningCount, pendingCount}) written by the generation probe.
+    queue: null,
     seq: ++STATE.seq,
     createdAt: nowIso(),
     startedAt: null,
@@ -495,6 +539,19 @@ async function runJob(job) {
         const value = Number(progress)
         if (!Number.isFinite(value)) return
         job.progress = Math.min(0.95, Math.max(job.progress || 0, value))
+      },
+      // v1.2.6: ComfyUI queue probe → surfaced as stage/queuePosition in the
+      // job view, so the composer and the cross-session task panel can show
+      // "排队第 N 位" instead of an opaque spinner.
+      onQueue: (info) => {
+        if (job.finalized || !isPlainObject(info)) return
+        job.queue = {
+          state: String(info.state || ''),
+          position: typeof info.position === 'number' ? info.position : null,
+          runningCount: Number(info.runningCount) || 0,
+          pendingCount: Number(info.pendingCount) || 0,
+        }
+        if (info.state === 'running' && job.progress < 0.45) job.progress = 0.45
       },
     })
 

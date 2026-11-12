@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-image-workbench'
-    const BUILD = '2026-11-12-client-m2-23'
+    const BUILD = '2026-11-12-client-m2-24'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.image-workbench.v1.ui'
 
@@ -188,6 +188,17 @@ window.__ModuleLoader__.load({
 .iw-crumb-sep{color:var(--dsw-alias-label-secondary);opacity:.5}
 .iw-crumb-strong{color:var(--dsw-alias-label-primary);font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:320px}
 .iw-topbar-spacer{flex:1 1 auto}
+.iw-topbar-tasks{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;cursor:pointer}
+.iw-topbar-tasks:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2)}
+.iw-topbar-tasks.busy{color:var(--dsw-alias-brand-primary);border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent);background:color-mix(in srgb,var(--dsw-alias-brand-primary) 10%,transparent)}
+.iw-task-list{display:flex;flex-direction:column;gap:8px}
+.iw-task-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:9px;background:var(--dsw-alias-bg-base)}
+.iw-task-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px}
+.iw-task-title{font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iw-task-meta{font-size:11px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iw-task-progress{display:flex;align-items:center;gap:8px;min-width:0}
+.iw-task-progress .iw-progress-track{flex:1 1 auto;height:4px}
+.iw-task-stage{flex:0 0 auto;font-size:11px;color:var(--dsw-alias-label-secondary)}
 .iw-canvas{flex:1 1 auto;min-height:0;overflow-y:auto;padding:24px 32px 8px;scroll-behavior:auto}
 .iw-canvas-inner{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;align-content:start;width:100%;max-width:1480px;margin:0 auto;padding-bottom:8px}
 .iw-canvas-caption{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;min-width:0;margin-bottom:2px}
@@ -1430,10 +1441,18 @@ window.__ModuleLoader__.load({
       if (!isObj(job)) return '生成中…'
       const status = str(job.status) || 'running'
       const pct = Math.round(clamp(num(job.progress, 0), 0, 1) * 100)
-      if (status === 'queued') return '排队中…'
+      const position =
+        typeof job.queuePosition === 'number' && job.queuePosition > 0 ? job.queuePosition : null
+      if (status === 'queued') return position ? `排队第 ${position} 位` : '排队中…'
       if (status === 'done') return '已完成'
       const label = JOB_STATUS_LABEL[status] || '生成中'
-      return status === 'running' ? `${label} · ${pct}%` : label
+      if (status === 'running') {
+        if (str(job.stage) === 'queued') {
+          return position ? `排队第 ${position} 位` : `${label} · 等待 ComfyUI`
+        }
+        return `${label} · ${pct}%`
+      }
+      return label
     }
 
     /* ------------------------------------------------------------------ */
@@ -3956,7 +3975,9 @@ window.__ModuleLoader__.load({
               className: 'iw-composer-textarea',
               rows: 1,
               value: prompt,
-              placeholder: '描述你想生成的画面，/ 调用指令，@ 添加参考图',
+              placeholder: comfy
+              ? '描述你想生成的画面（ComfyUI 工作流模式：文字写入绑定的提示词节点）'
+              : '描述你想生成的画面，/ 调用指令，@ 添加参考图',
               onChange: (event) => onPromptChange(event.target.value),
               onKeyDown: handleKeyDown,
               onPaste: handlePaste,
@@ -3979,7 +4000,7 @@ window.__ModuleLoader__.load({
                       ? 'ComfyUI 工作流模式暂不支持参考图'
                       : '添加参考图（也支持粘贴图片）',
                     onClick: openFilePicker,
-                    disabled: !!uploading,
+                    disabled: !!uploading || comfy,
                   },
                   uploading ? h(Spinner, { size: 14 }) : h(Icon, { name: 'plus', size: 16 }),
                 ),
@@ -7280,7 +7301,15 @@ window.__ModuleLoader__.load({
     function Topbar(props) {
       // v1.3: 「新对话」「设置」buttons were duplicates of the sidebar entries
       // (新会话 / API 设置) and are removed; only the refresh action remains.
-      const { activeWorkspace, conversation, conversationLoading, onRefresh, refreshing } = props
+      const {
+        activeWorkspace,
+        conversation,
+        conversationLoading,
+        onRefresh,
+        refreshing,
+        taskCount,
+        onOpenTasks,
+      } = props
       return h(
         'div',
         { className: 'iw-topbar' },
@@ -7301,12 +7330,111 @@ window.__ModuleLoader__.load({
           conversationLoading ? h(Spinner, { size: 11 }) : null,
         ),
         h('div', { className: 'iw-topbar-spacer' }),
+        h(
+          'button',
+          {
+            type: 'button',
+            className: cx('iw-topbar-tasks', taskCount > 0 && 'busy'),
+            title:
+              taskCount > 0
+                ? `${taskCount} 个生成任务进行中（跨会话）`
+                : '生成任务（跨会话）',
+            onClick: onOpenTasks,
+          },
+          taskCount > 0 ? h(Spinner, { size: 12 }) : h(Icon, { name: 'dots', size: 14 }),
+          h('span', null, taskCount > 0 ? `任务 ${taskCount}` : '任务'),
+        ),
         h(IconButton, {
           name: 'refresh',
           title: '刷新当前会话',
           onClick: onRefresh,
           disabled: !activeWorkspace || !!refreshing,
         }),
+      )
+    }
+
+    /**
+     * v1.2.6 (P0-1): cross-session task panel. Rows come from the host's
+     * `job.list` (all running/queued jobs, regardless of the open conversation)
+     * and can be cancelled from here.
+     */
+    function TaskPanel(props) {
+      const items = Array.isArray(props.items) ? props.items : []
+      const workspaceName = (wsId) => {
+        const workspace = (props.workspaces || []).find((item) => item.id === wsId)
+        return workspace && workspace.name ? workspace.name : '工作区'
+      }
+      const conversationTitle = (wsId, convId) => {
+        const workspace = (props.workspaces || []).find((item) => item.id === wsId)
+        const list = workspace && Array.isArray(workspace.conversations) ? workspace.conversations : []
+        const conversation = list.find((item) => item.id === convId)
+        return conversation && conversation.title ? conversation.title : '会话'
+      }
+      return h(
+        Modal,
+        {
+          title: '生成任务',
+          subtitle: items.length
+            ? `${items.length} 个任务进行中（跨会话）`
+            : '当前没有进行中的生成任务',
+          onClose: props.onClose,
+          width: 640,
+          className: 'iw-settings',
+        },
+        items.length
+          ? h(
+              'div',
+              { className: 'iw-task-list' },
+              items.map((job) => {
+                const name = str(job.displayName) || str(job.model) || '生成任务'
+                const statusText = jobProgressText(job)
+                const pct = Math.round(clamp(num(job.progress, 0), 0, 1) * 100)
+                return h(
+                  'div',
+                  { key: job.jobId, className: 'iw-task-row' },
+                  h(
+                    'div',
+                    { className: 'iw-task-main' },
+                    h('div', { className: 'iw-task-title' }, name),
+                    h(
+                      'div',
+                      { className: 'iw-task-meta' },
+                      `${workspaceName(job.workspaceId)} › ${conversationTitle(job.workspaceId, job.conversationId)}${
+                        str(job.prompt) ? ` · ${truncate(job.prompt, 44)}` : ''
+                      }`,
+                    ),
+                    h(
+                      'div',
+                      { className: 'iw-task-progress' },
+                      h(
+                        'span',
+                        { className: 'iw-progress-track' },
+                        h('span', {
+                          className: 'iw-progress-fill',
+                          style: { width: `${pct}%` },
+                        }),
+                      ),
+                      h('span', { className: 'iw-task-stage' }, statusText),
+                    ),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'iw-btn iw-btn-sm',
+                      disabled: props.cancellingId === job.jobId,
+                      onClick: () => props.onCancel(job.jobId),
+                    },
+                    props.cancellingId === job.jobId ? '取消中…' : '取消',
+                  ),
+                )
+              }),
+            )
+          : h(
+              'div',
+              { className: 'iw-settings-empty' },
+              '任务完成后会从列表消失；生成中的任务可以在这里直接取消。',
+            ),
       )
     }
 
@@ -7343,6 +7471,10 @@ window.__ModuleLoader__.load({
       const [uploading, setUploading] = useState(false)
       const [sending, setSending] = useState(false)
       const [jobs, setJobs] = useState([])
+      // v1.2.6: cross-session task panel (polled from host `job.list`).
+      const [taskPanelOpen, setTaskPanelOpen] = useState(false)
+      const [taskItems, setTaskItems] = useState([])
+      const [cancellingJobId, setCancellingJobId] = useState('')
       const [toasts, setToasts] = useState([])
       const [settingsOpen, setSettingsOpen] = useState(false)
       // v1.10: first-run proxy onboarding (candidates from bootstrap).
@@ -7369,6 +7501,12 @@ window.__ModuleLoader__.load({
       const workflowsRef = useRef([])
       const conversationRef = useRef(null)
       const jobsRef = useRef([])
+      // v1.2.6: per-conversation composer drafts (P0-2).
+      const promptRef = useRef('')
+      const draftRef = useRef(
+        isObj(storedUiRef.current.drafts) ? { ...storedUiRef.current.drafts } : {},
+      )
+      const draftConvRef = useRef('')
       const loadSeqRef = useRef(0)
       const pollTokensRef = useRef(new Map())
       const toastTimersRef = useRef(new Map())
@@ -7671,12 +7809,54 @@ window.__ModuleLoader__.load({
       }, [boot.status, boot.error, autoRetryStopped, retryToken])
 
       useEffect(() => {
+        promptRef.current = prompt
+      }, [prompt])
+
+      // v1.2.6 (P0-2): keep a draft per conversation. Switching saves the
+      // current text under the previous conversation and restores the target's,
+      // so text never leaks across conversations and survives a page reload.
+      useEffect(() => {
+        const nextId = activeConversationId || ''
+        const previousId = draftConvRef.current
+        if (previousId && previousId !== nextId) {
+          draftRef.current[previousId] = promptRef.current
+        }
+        draftConvRef.current = nextId
+        if (nextId) setPrompt(str(draftRef.current[nextId]))
+        else setPrompt('')
+      }, [activeConversationId])
+
+      // v1.2.6 (P0-1): cross-session task list for the toolbar panel. The host
+      // is the source of truth (survives reloads); poll faster while open.
+      useEffect(() => {
+        if (boot.status !== 'ready') return undefined
+        let cancelled = false
+        const interval = taskPanelOpen ? 2000 : 5000
+        const fetchTasks = async () => {
+          try {
+            const data = await rpc('job.list')
+            if (cancelled || !mountedRef.current) return
+            setTaskItems(isObj(data) && Array.isArray(data.jobs) ? data.jobs : [])
+          } catch (error) {
+            // Best effort: keeping the previous list is better than dropping it.
+          }
+        }
+        void fetchTasks()
+        const timer = setInterval(fetchTasks, interval)
+        return () => {
+          cancelled = true
+          clearInterval(timer)
+        }
+      }, [boot.status, taskPanelOpen])
+
+      useEffect(() => {
         if (boot.status !== 'ready') return undefined
         const timer = setTimeout(() => {
-          saveUiState({ activeWorkspaceId, activeConversationId, expanded, params })
+          if (activeConversationId) draftRef.current[activeConversationId] = prompt
+          saveUiState({ activeWorkspaceId, activeConversationId, expanded, params, drafts: draftRef.current })
         }, 150)
         return () => clearTimeout(timer)
-      }, [boot.status, activeWorkspaceId, activeConversationId, expanded, params])
+      }, [boot.status, activeWorkspaceId, activeConversationId, expanded, params, prompt])
 
       // v1.2: a persisted comfy:<id> selection must be validated against the
       // loaded workflow list — if that workflow vanished, fall back to a model.
@@ -7956,7 +8136,16 @@ window.__ModuleLoader__.load({
               ? str(job.status)
               : 'running'
             const progress = clamp(num(job.progress, 0), 0, 1)
-            updateJob({ status, progress, error: str(job.error) || null })
+            updateJob({
+              status,
+              progress,
+              error: str(job.error) || null,
+              stage: str(job.stage) || '',
+              queuePosition:
+                typeof job.queuePosition === 'number' && job.queuePosition > 0
+                  ? job.queuePosition
+                  : null,
+            })
             // v1.2.4: ComfyUI randomized numeric params — show the value that was
             // actually drawn once the run settles, so the number next to the
             // "随机" toggle changes after every generation.
@@ -8290,6 +8479,28 @@ window.__ModuleLoader__.load({
           pushToast('info', '已请求取消本次生成')
         } catch (error) {
           pushToast('error', `取消失败：${(error && error.message) || error}`)
+        }
+      }
+
+      /** v1.2.6 (P0-1): cancel a job from the cross-session task panel. */
+      async function handleCancelTask(jobId) {
+        if (!jobId || cancellingJobId) return
+        setCancellingJobId(jobId)
+        try {
+          await rpc('job.cancel', { jobId })
+          pushToast('info', '已请求取消任务')
+        } catch (error) {
+          pushToast('error', `取消失败：${(error && error.message) || error}`)
+        } finally {
+          if (mountedRef.current) setCancellingJobId('')
+        }
+        try {
+          const data = await rpc('job.list')
+          if (mountedRef.current) {
+            setTaskItems(isObj(data) && Array.isArray(data.jobs) ? data.jobs : [])
+          }
+        } catch (error) {
+          // keep the previous list
         }
       }
 
@@ -8823,6 +9034,8 @@ window.__ModuleLoader__.load({
                     conversationLoading,
                     refreshing,
                     onRefresh: handleRefresh,
+                    taskCount: taskItems.length,
+                    onOpenTasks: () => setTaskPanelOpen(true),
                   }),
                   h(Canvas, {
                     conversation,
@@ -8958,6 +9171,15 @@ window.__ModuleLoader__.load({
               pushToast,
               onClose: () => setMaskEditor(null),
               onSubmit: handleInpaintSubmit,
+            })
+          : null,
+        taskPanelOpen && boot.status === 'ready'
+          ? h(TaskPanel, {
+              items: taskItems,
+              workspaces,
+              cancellingId: cancellingJobId,
+              onCancel: handleCancelTask,
+              onClose: () => setTaskPanelOpen(false),
             })
           : null,
         costOpen && boot.status === 'ready'

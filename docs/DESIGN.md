@@ -79,6 +79,18 @@ user-readable Chinese message.
 ComfyUI is local, so these requests bypass the configured proxy. Polling,
 `/prompt` and image downloads all honour the job's `AbortSignal`.
 
+## Job visibility (v1.2.6)
+
+- `job.get` additionally returns `stage` (`queued` / `running` / `done`),
+  `queuePosition` (1-based position in ComfyUI's pending list, when known) and
+  `queueRunning` / `queuePending` counts, written by a `/queue` probe during
+  generation.
+- `comfy.queue` returns the current `/queue` snapshot (never throws; `ok:false`
+  on failure).
+- `job.list` returns every non-terminal job across conversations (with
+  `workspaceId`, `conversationId`, `displayName`, `prompt` preview), powering
+  the toolbar task panel.
+
 ## Client behaviour
 
 - The `comfy:<workflowId>` prefix in `params.model` is authoritative; a stale

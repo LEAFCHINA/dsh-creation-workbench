@@ -460,7 +460,9 @@
               className: 'iw-composer-textarea',
               rows: 1,
               value: prompt,
-              placeholder: '描述你想生成的画面，/ 调用指令，@ 添加参考图',
+              placeholder: comfy
+              ? '描述你想生成的画面（ComfyUI 工作流模式：文字写入绑定的提示词节点）'
+              : '描述你想生成的画面，/ 调用指令，@ 添加参考图',
               onChange: (event) => onPromptChange(event.target.value),
               onKeyDown: handleKeyDown,
               onPaste: handlePaste,
@@ -483,7 +485,7 @@
                       ? 'ComfyUI 工作流模式暂不支持参考图'
                       : '添加参考图（也支持粘贴图片）',
                     onClick: openFilePicker,
-                    disabled: !!uploading,
+                    disabled: !!uploading || comfy,
                   },
                   uploading ? h(Spinner, { size: 14 }) : h(Icon, { name: 'plus', size: 16 }),
                 ),

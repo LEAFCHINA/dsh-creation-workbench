@@ -22,6 +22,8 @@ ComfyUI workflows in the composer — the exposed node inputs become wrapping co
 - **ComfyUI parameter exposure** — per input: label, type (text / int / float / bool / select), min/max/step, options, default, randomize (seeds); searchable two-pane node picker.
 - **Inline per-generation controls** — numeric params carry a **随机** toggle right in the composer, and the value that was actually drawn is shown after each run. The **张数** selector only appears when the workflow exposes a `batch_size` input; a workflow without it runs once per send.
 - **Reorderable parameter row** — the workflow editor shows a drag-and-drop preview of the composer row; drag the chips (or use ↑↓) to change the order in which the exposed params appear.
+- **Queue-aware progress & cross-session task panel** — ComfyUI runs show their live queue position, and a toolbar 「任务」 panel lists running/queued jobs across all conversations with cancel buttons.
+- **Per-conversation drafts** — unsent composer text is kept per conversation and restored when you switch back.
 - **Prompt binding** — one exposed text input is explicitly bound to the composer, so the prompt you type always reaches the workflow. Unbound workflows show a clickable warning instead of silently dropping the text.
 - **Multi-image, cancel/timeout, retry, image detail view**.
 - **Local files** — configurable image directory, save-as, open folder, copy path.

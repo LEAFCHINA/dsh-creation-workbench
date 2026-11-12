@@ -5,7 +5,15 @@
     function Topbar(props) {
       // v1.3: 「新对话」「设置」buttons were duplicates of the sidebar entries
       // (新会话 / API 设置) and are removed; only the refresh action remains.
-      const { activeWorkspace, conversation, conversationLoading, onRefresh, refreshing } = props
+      const {
+        activeWorkspace,
+        conversation,
+        conversationLoading,
+        onRefresh,
+        refreshing,
+        taskCount,
+        onOpenTasks,
+      } = props
       return h(
         'div',
         { className: 'iw-topbar' },
@@ -26,12 +34,111 @@
           conversationLoading ? h(Spinner, { size: 11 }) : null,
         ),
         h('div', { className: 'iw-topbar-spacer' }),
+        h(
+          'button',
+          {
+            type: 'button',
+            className: cx('iw-topbar-tasks', taskCount > 0 && 'busy'),
+            title:
+              taskCount > 0
+                ? `${taskCount} 个生成任务进行中（跨会话）`
+                : '生成任务（跨会话）',
+            onClick: onOpenTasks,
+          },
+          taskCount > 0 ? h(Spinner, { size: 12 }) : h(Icon, { name: 'dots', size: 14 }),
+          h('span', null, taskCount > 0 ? `任务 ${taskCount}` : '任务'),
+        ),
         h(IconButton, {
           name: 'refresh',
           title: '刷新当前会话',
           onClick: onRefresh,
           disabled: !activeWorkspace || !!refreshing,
         }),
+      )
+    }
+
+    /**
+     * v1.2.6 (P0-1): cross-session task panel. Rows come from the host's
+     * `job.list` (all running/queued jobs, regardless of the open conversation)
+     * and can be cancelled from here.
+     */
+    function TaskPanel(props) {
+      const items = Array.isArray(props.items) ? props.items : []
+      const workspaceName = (wsId) => {
+        const workspace = (props.workspaces || []).find((item) => item.id === wsId)
+        return workspace && workspace.name ? workspace.name : '工作区'
+      }
+      const conversationTitle = (wsId, convId) => {
+        const workspace = (props.workspaces || []).find((item) => item.id === wsId)
+        const list = workspace && Array.isArray(workspace.conversations) ? workspace.conversations : []
+        const conversation = list.find((item) => item.id === convId)
+        return conversation && conversation.title ? conversation.title : '会话'
+      }
+      return h(
+        Modal,
+        {
+          title: '生成任务',
+          subtitle: items.length
+            ? `${items.length} 个任务进行中（跨会话）`
+            : '当前没有进行中的生成任务',
+          onClose: props.onClose,
+          width: 640,
+          className: 'iw-settings',
+        },
+        items.length
+          ? h(
+              'div',
+              { className: 'iw-task-list' },
+              items.map((job) => {
+                const name = str(job.displayName) || str(job.model) || '生成任务'
+                const statusText = jobProgressText(job)
+                const pct = Math.round(clamp(num(job.progress, 0), 0, 1) * 100)
+                return h(
+                  'div',
+                  { key: job.jobId, className: 'iw-task-row' },
+                  h(
+                    'div',
+                    { className: 'iw-task-main' },
+                    h('div', { className: 'iw-task-title' }, name),
+                    h(
+                      'div',
+                      { className: 'iw-task-meta' },
+                      `${workspaceName(job.workspaceId)} › ${conversationTitle(job.workspaceId, job.conversationId)}${
+                        str(job.prompt) ? ` · ${truncate(job.prompt, 44)}` : ''
+                      }`,
+                    ),
+                    h(
+                      'div',
+                      { className: 'iw-task-progress' },
+                      h(
+                        'span',
+                        { className: 'iw-progress-track' },
+                        h('span', {
+                          className: 'iw-progress-fill',
+                          style: { width: `${pct}%` },
+                        }),
+                      ),
+                      h('span', { className: 'iw-task-stage' }, statusText),
+                    ),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'iw-btn iw-btn-sm',
+                      disabled: props.cancellingId === job.jobId,
+                      onClick: () => props.onCancel(job.jobId),
+                    },
+                    props.cancellingId === job.jobId ? '取消中…' : '取消',
+                  ),
+                )
+              }),
+            )
+          : h(
+              'div',
+              { className: 'iw-settings-empty' },
+              '任务完成后会从列表消失；生成中的任务可以在这里直接取消。',
+            ),
       )
     }
 
@@ -68,6 +175,10 @@
       const [uploading, setUploading] = useState(false)
       const [sending, setSending] = useState(false)
       const [jobs, setJobs] = useState([])
+      // v1.2.6: cross-session task panel (polled from host `job.list`).
+      const [taskPanelOpen, setTaskPanelOpen] = useState(false)
+      const [taskItems, setTaskItems] = useState([])
+      const [cancellingJobId, setCancellingJobId] = useState('')
       const [toasts, setToasts] = useState([])
       const [settingsOpen, setSettingsOpen] = useState(false)
       // v1.10: first-run proxy onboarding (candidates from bootstrap).
@@ -94,6 +205,12 @@
       const workflowsRef = useRef([])
       const conversationRef = useRef(null)
       const jobsRef = useRef([])
+      // v1.2.6: per-conversation composer drafts (P0-2).
+      const promptRef = useRef('')
+      const draftRef = useRef(
+        isObj(storedUiRef.current.drafts) ? { ...storedUiRef.current.drafts } : {},
+      )
+      const draftConvRef = useRef('')
       const loadSeqRef = useRef(0)
       const pollTokensRef = useRef(new Map())
       const toastTimersRef = useRef(new Map())
@@ -396,12 +513,54 @@
       }, [boot.status, boot.error, autoRetryStopped, retryToken])
 
       useEffect(() => {
+        promptRef.current = prompt
+      }, [prompt])
+
+      // v1.2.6 (P0-2): keep a draft per conversation. Switching saves the
+      // current text under the previous conversation and restores the target's,
+      // so text never leaks across conversations and survives a page reload.
+      useEffect(() => {
+        const nextId = activeConversationId || ''
+        const previousId = draftConvRef.current
+        if (previousId && previousId !== nextId) {
+          draftRef.current[previousId] = promptRef.current
+        }
+        draftConvRef.current = nextId
+        if (nextId) setPrompt(str(draftRef.current[nextId]))
+        else setPrompt('')
+      }, [activeConversationId])
+
+      // v1.2.6 (P0-1): cross-session task list for the toolbar panel. The host
+      // is the source of truth (survives reloads); poll faster while open.
+      useEffect(() => {
+        if (boot.status !== 'ready') return undefined
+        let cancelled = false
+        const interval = taskPanelOpen ? 2000 : 5000
+        const fetchTasks = async () => {
+          try {
+            const data = await rpc('job.list')
+            if (cancelled || !mountedRef.current) return
+            setTaskItems(isObj(data) && Array.isArray(data.jobs) ? data.jobs : [])
+          } catch (error) {
+            // Best effort: keeping the previous list is better than dropping it.
+          }
+        }
+        void fetchTasks()
+        const timer = setInterval(fetchTasks, interval)
+        return () => {
+          cancelled = true
+          clearInterval(timer)
+        }
+      }, [boot.status, taskPanelOpen])
+
+      useEffect(() => {
         if (boot.status !== 'ready') return undefined
         const timer = setTimeout(() => {
-          saveUiState({ activeWorkspaceId, activeConversationId, expanded, params })
+          if (activeConversationId) draftRef.current[activeConversationId] = prompt
+          saveUiState({ activeWorkspaceId, activeConversationId, expanded, params, drafts: draftRef.current })
         }, 150)
         return () => clearTimeout(timer)
-      }, [boot.status, activeWorkspaceId, activeConversationId, expanded, params])
+      }, [boot.status, activeWorkspaceId, activeConversationId, expanded, params, prompt])
 
       // v1.2: a persisted comfy:<id> selection must be validated against the
       // loaded workflow list — if that workflow vanished, fall back to a model.
@@ -681,7 +840,16 @@
               ? str(job.status)
               : 'running'
             const progress = clamp(num(job.progress, 0), 0, 1)
-            updateJob({ status, progress, error: str(job.error) || null })
+            updateJob({
+              status,
+              progress,
+              error: str(job.error) || null,
+              stage: str(job.stage) || '',
+              queuePosition:
+                typeof job.queuePosition === 'number' && job.queuePosition > 0
+                  ? job.queuePosition
+                  : null,
+            })
             // v1.2.4: ComfyUI randomized numeric params — show the value that was
             // actually drawn once the run settles, so the number next to the
             // "随机" toggle changes after every generation.
@@ -1015,6 +1183,28 @@
           pushToast('info', '已请求取消本次生成')
         } catch (error) {
           pushToast('error', `取消失败：${(error && error.message) || error}`)
+        }
+      }
+
+      /** v1.2.6 (P0-1): cancel a job from the cross-session task panel. */
+      async function handleCancelTask(jobId) {
+        if (!jobId || cancellingJobId) return
+        setCancellingJobId(jobId)
+        try {
+          await rpc('job.cancel', { jobId })
+          pushToast('info', '已请求取消任务')
+        } catch (error) {
+          pushToast('error', `取消失败：${(error && error.message) || error}`)
+        } finally {
+          if (mountedRef.current) setCancellingJobId('')
+        }
+        try {
+          const data = await rpc('job.list')
+          if (mountedRef.current) {
+            setTaskItems(isObj(data) && Array.isArray(data.jobs) ? data.jobs : [])
+          }
+        } catch (error) {
+          // keep the previous list
         }
       }
 
@@ -1548,6 +1738,8 @@
                     conversationLoading,
                     refreshing,
                     onRefresh: handleRefresh,
+                    taskCount: taskItems.length,
+                    onOpenTasks: () => setTaskPanelOpen(true),
                   }),
                   h(Canvas, {
                     conversation,
@@ -1683,6 +1875,15 @@
               pushToast,
               onClose: () => setMaskEditor(null),
               onSubmit: handleInpaintSubmit,
+            })
+          : null,
+        taskPanelOpen && boot.status === 'ready'
+          ? h(TaskPanel, {
+              items: taskItems,
+              workspaces,
+              cancellingId: cancellingJobId,
+              onCancel: handleCancelTask,
+              onClose: () => setTaskPanelOpen(false),
             })
           : null,
         costOpen && boot.status === 'ready'

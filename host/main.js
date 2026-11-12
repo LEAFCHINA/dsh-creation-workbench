@@ -30,7 +30,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-12-host-20'
+export const HOST_BUILD = '2026-11-12-host-21'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -294,6 +294,10 @@ async function dispatchOp(payload, env) {
     case 'job.cancel':
       return jobs.cancelJob(payload.jobId)
 
+    /* v1.2.6: active jobs across all conversations (cross-session task panel). */
+    case 'job.list':
+      return jobs.listJobs()
+
     /* CONTRACT 补丁 v1.1 §5: stop a turn by id (in-memory job or orphan). */
     case 'turn.abort': {
       if (!isId(payload.workspaceId, 'ws')) throw new ApiError('工作区 ID 无效', 'INVALID_REQUEST', 400)
@@ -320,6 +324,12 @@ async function dispatchOp(payload, env) {
     case 'comfy.status': {
       const settings = await store.readSettingsRaw()
       return comfy.comfyStatus(settings)
+    }
+
+    /* v1.2.6: live ComfyUI queue snapshot (running/pending prompt ids). */
+    case 'comfy.queue': {
+      const settings = await store.readSettingsRaw()
+      return comfy.readQueue(settings)
     }
 
     case 'comfy.workflow.list':

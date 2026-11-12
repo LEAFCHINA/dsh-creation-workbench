@@ -670,7 +670,7 @@ async function generateXai({ config, params, prompt, refs, signal, onProgress, t
  * Generate images. `refs` = [{ bytes, mime, name }].
  * Returns `{ dialect, mode, images: [{ bytes, mime, w, h }] }`.
  */
-export async function generateImages({ config, settings, params, prompt, refs, signal, onProgress, mask }) {
+export async function generateImages({ config, settings, params, prompt, refs, signal, onProgress, mask, onQueue }) {
   const dialect = resolveDialect(params?.model, settings?.models)
   // CONTRACT 补丁 v1.2 §2.5: the local ComfyUI workflow dialect skips the
   // third-party API checks (API key, video model, inpainting) entirely; the
@@ -683,6 +683,7 @@ export async function generateImages({ config, settings, params, prompt, refs, s
       refs: Array.isArray(refs) ? refs : [],
       signal,
       onProgress,
+      onQueue,
     })
   }
   // CONTRACT 补丁 v1.1 §4: never call upstream for a video model.

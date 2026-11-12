@@ -2,6 +2,23 @@
 
 First public release: **1.2.2**.
 
+## 1.2.6
+
+- **Queue-aware progress for ComfyUI runs.** The host now probes ComfyUI's
+  `/queue` while a prompt is pending and exposes `stage` / `queuePosition` on
+  `job.get`; the composer shows “排队第 N 位 / 执行中 xx%” instead of an opaque
+  spinner.
+- **Cross-session task panel.** A new toolbar entry (「任务」) lists every
+  running/queued job across all conversations, with workflow name, conversation,
+  progress and a cancel button. Backed by the new host `job.list` RPC, so it
+  survives page reloads.
+- **New RPCs:** `comfy.queue` (live queue snapshot) and `job.list` (active jobs).
+- **Per-conversation composer drafts.** Switching conversations now saves the
+  current input and restores the target conversation's draft (persisted in
+  localStorage), so text can no longer be sent into the wrong conversation.
+- ComfyUI mode no longer advertises reference-image affordances: the “+”
+  button is disabled and the placeholder no longer mentions “@ 添加参考图”.
+
 ## 1.2.5
 
 - **Fix: switching between ComfyUI workflows could run the wrong workflow.** The
