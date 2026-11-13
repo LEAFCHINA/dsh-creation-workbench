@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-36'
+    const BUILD = '2026-11-13-client-m2-37'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -772,6 +772,16 @@ window.__ModuleLoader__.load({
 .iw-vram-release{border:none;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:10.5px;cursor:pointer;padding:0 2px;border-radius:4px}
 .iw-vram-release:hover{color:var(--dsw-alias-state-error-primary)}
 
+/* v2.7: agent chat conversation */
+.iw-agent-chat{display:flex;flex-direction:column}
+.iw-agent-chat-inner{display:flex;flex-direction:column;gap:10px;max-width:900px;margin:0 auto;width:100%;grid-template-columns:none}
+.iw-agent-chat-head{display:flex;align-items:center;gap:8px;padding:2px 2px 6px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.iw-agent-chat-title{font-size:13px;font-weight:600}
+.iw-agent-chat-body{display:flex;flex-direction:column;gap:12px;padding:10px 2px;flex:1 1 auto;min-height:0;overflow-y:auto}
+.iw-agent-chat .iw-agent-bubble{max-width:78%}
+.iw-composer.iw-agent-chat-mode .iw-composer-controls{display:none}
+.iw-conv-agent{flex:0 0 auto;font-size:9px;margin-right:3px;filter:saturate(1.2)}
+
 `
 /* ===== 10-helpers.js ===== */
     /* ------------------------------------------------------------------ */
@@ -1421,6 +1431,27 @@ window.__ModuleLoader__.load({
       }
     }
 
+      /* ---- v2.7: agent chat conversations -------------------------------- */
+
+      function normalizeAgentMessage(raw) {
+        const source = isObj(raw) ? raw : {}
+        const role = source.role === 'assistant' ? 'assistant' : source.role === 'user' ? 'user' : ''
+        if (!role) return null
+        const text = str(source.text)
+        if (!text) return null
+        return {
+          id: str(source.id),
+          role,
+          text,
+          createdAt: str(source.createdAt),
+          elapsedMs: num(source.elapsedMs, 0),
+        }
+      }
+
+      function isAgentConversation(conv) {
+        return Boolean(conv && isObj(conv.meta) && conv.meta.kind === 'agent')
+      }
+
     function normalizeConversation(raw) {
       const source = isObj(raw) ? raw : {}
       const id = str(source.id)
@@ -1432,6 +1463,16 @@ window.__ModuleLoader__.load({
         createdAt: str(source.createdAt),
         updatedAt: str(source.updatedAt) || str(source.createdAt),
         turns: (Array.isArray(source.turns) ? source.turns : []).map(normalizeTurn).filter(Boolean),
+        messages: (Array.isArray(source.messages) ? source.messages : [])
+          .map(normalizeAgentMessage)
+          .filter(Boolean),
+        meta: isObj(source.meta)
+          ? {
+              kind: str(source.meta.kind),
+              templateId: str(source.meta.templateId),
+              templateName: str(source.meta.templateName),
+            }
+          : null,
       }
     }
 
@@ -1441,6 +1482,7 @@ window.__ModuleLoader__.load({
       if (!id) return null
       return {
         id,
+        agentKind: isObj(source.meta) && source.meta.kind === 'agent',
         title: str(source.title) || '新会话',
         createdAt: str(source.createdAt),
         updatedAt: str(source.updatedAt) || str(source.createdAt),
@@ -2697,7 +2739,10 @@ window.__ModuleLoader__.load({
                                   h(
                                     'span',
                                     { className: 'iw-conv-main' },
-                                    h('span', { className: 'iw-conv-title' }, conversation.title || '新会话'),
+                                    conversation.agentKind
+                        ? h('span', { className: 'iw-conv-agent', title: 'Agent 会话' }, '✨')
+                        : null,
+                      h('span', { className: 'iw-conv-title' }, conversation.title || '新会话'),
                                     h(
                                       'span',
                                       { className: 'iw-conv-time' },
@@ -3561,6 +3606,151 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * v2.7: agent chat conversation view (real workspace conversation).
+     */
+    function AgentChatCanvas(props) {
+      const conversation = props.conversation || null
+      const messages = conversation && Array.isArray(conversation.messages) ? conversation.messages : []
+      const scrollRef = useRef(null)
+      const [selection, setSelection] = useState('')
+
+      useEffect(() => {
+        const element = scrollRef.current
+        if (!element) return
+        element.scrollTop = element.scrollHeight
+      }, [messages.length, conversation && conversation.id, props.sending])
+
+      const capture = () => {
+        try {
+          const selected = String(window.getSelection ? window.getSelection().toString() : '').trim()
+          setSelection(selected)
+        } catch (error) {
+          setSelection('')
+        }
+      }
+
+      return h(
+        'div',
+        { className: 'iw-canvas iw-agent-chat' },
+        h(
+          'div',
+          { className: 'iw-canvas-inner iw-agent-chat-inner' },
+          h(
+            'div',
+            { className: 'iw-agent-chat-head' },
+            h(Icon, { name: 'spark', size: 13 }),
+            h(
+              'span',
+              { className: 'iw-agent-chat-title' },
+              str(conversation && conversation.meta && conversation.meta.templateName) || 'Agent 会话',
+            ),
+            h('span', { className: 'iw-agent-drawer-badge' }, 'Agent 会话'),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'iw-agent-mini',
+                title: '清空这段会话的消息（不影响模板）',
+                onClick: props.onClear,
+              },
+              '清空消息',
+            ),
+          ),
+          messages.length === 0
+            ? h(
+                'div',
+                { className: 'iw-agent-empty' },
+                h(Icon, { name: 'spark', size: 22 }),
+                h('div', null, '这个 Agent 会话还没有消息。'),
+                h(
+                  'div',
+                  { className: 'iw-agent-empty-sub' },
+                  '在下方输入想法或粘贴图片，发送后会按对话记录；历史会保存，下次打开还在。',
+                ),
+              )
+            : h(
+                'div',
+                { className: 'iw-agent-chat-body', ref: scrollRef, onMouseUp: capture },
+                messages.map((message) =>
+                  message.role === 'user'
+                    ? h(
+                        'div',
+                        { key: message.id, className: 'iw-agent-msg iw-agent-msg-user' },
+                        h('div', { className: 'iw-agent-bubble' }, message.text),
+                      )
+                    : h(
+                        'div',
+                        { key: message.id, className: 'iw-agent-msg iw-agent-msg-bot' },
+                        h('div', { className: 'iw-agent-bubble' }, message.text),
+                        h(
+                          'div',
+                          { className: 'iw-agent-msg-actions' },
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              className: 'iw-agent-mini',
+                              onClick: () => props.onInsert(message.text),
+                            },
+                            '送入输入框',
+                          ),
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              className: 'iw-agent-mini',
+                              onClick: () => props.onCopy(message.text),
+                            },
+                            '复制',
+                          ),
+                          message.elapsedMs
+                            ? h(
+                                'span',
+                                { className: 'iw-agent-msg-meta' },
+                                Math.round(message.elapsedMs / 1000) + 's · ' + message.text.length + ' 字',
+                              )
+                            : null,
+                        ),
+                      ),
+                ),
+                props.sending
+                  ? h(
+                      'div',
+                      { className: 'iw-agent-msg iw-agent-msg-bot' },
+                      h(
+                        'div',
+                        { className: 'iw-agent-bubble iw-agent-typing' },
+                        h(Spinner, { size: 12 }),
+                        'Agent 正在思考…',
+                      ),
+                    )
+                  : null,
+              ),
+          selection
+            ? h(
+                'div',
+                { className: 'iw-agent-selection' },
+                h('span', null, '已选中 ' + selection.length + ' 字'),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn iw-btn-primary iw-btn-sm',
+                    onClick: () => props.onInsert(selection),
+                  },
+                  '送入输入框',
+                ),
+                h(
+                  'button',
+                  { type: 'button', className: 'iw-btn iw-btn-sm', onClick: () => setSelection('') },
+                  '取消选择',
+                ),
+              )
+            : null,
+        ),
+      )
+    }
 /* ===== 55-detail.js ===== */
     /* ------------------------------------------------------------------ */
     /* Detail overlay: right 3/4 large image, left 1/4 info column         */
@@ -4022,6 +4212,7 @@ window.__ModuleLoader__.load({
       const fileInputRef = useRef(null)
       // v1.3: refs for the one-time composer layout self-check (no screenshots).
       const composerRef = useRef(null)
+      const agentChat = !!props.agentChat
       // v2.2: `@` template picker state.
       const templateList = Array.isArray(props.templates) ? props.templates : []
       const [atMenu, setAtMenu] = useState({ open: false, query: '', at: -1 })
@@ -4862,7 +5053,7 @@ window.__ModuleLoader__.load({
           { className: 'iw-composer-wrap' },
           h(
             'div',
-            { className: cx('iw-composer', focused && 'focused', agentTemplate && 'iw-agent-mode'), ref: composerRef },
+            { className: cx('iw-composer', focused && 'focused', agentTemplate && 'iw-agent-mode', agentChat && 'iw-agent-chat-mode'), ref: composerRef },
             agentTemplate ? renderAgentPanel() : atMenu.open ? renderAtMenu() : null,
             refList.length
               ? h(
@@ -4896,9 +5087,11 @@ window.__ModuleLoader__.load({
               className: 'iw-composer-textarea',
               rows: 1,
               value: prompt,
-              placeholder: comfy
-              ? '描述你想生成的画面（ComfyUI 工作流模式：文字写入绑定的提示词节点）'
-              : '描述你想生成的画面，/ 调用指令，@ 插入提示词模板',
+              placeholder: agentChat
+                ? '和 Agent 对话：描述想法，或粘贴图片让它反推提示词…'
+                : comfy
+                  ? '描述你想生成的画面（ComfyUI 工作流模式：文字写入绑定的提示词节点）'
+                  : '描述你想生成的画面，/ 调用指令，@ 插入提示词模板',
               onChange: (event) => handlePromptInput(event.target.value),
               onKeyDown: handleKeyDown,
               onPaste: handlePaste,
@@ -5121,25 +5314,6 @@ window.__ModuleLoader__.load({
                     })
                   : null,
               ),
-              comfy && vram && (vram.totalBytes > 0 || vram.totalGiB > 0)
-                ? h(
-                    'span',
-                    { className: 'iw-vram', title: 'ComfyUI 显存占用（模型常驻时会保持高位）' },
-                    h('span', { className: 'iw-vram-text' },
-                      `显存 ${vram.usedGiB}/${vram.totalGiB}G`,
-                    ),
-                    h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'iw-vram-release',
-                        title: '释放 ComfyUI 占用的显存（包括你在 ComfyUI 里加载的模型）',
-                        onClick: onReleaseVram,
-                      },
-                      '释放',
-                    ),
-                  )
-                : null,
               // v1.3: send button is a sibling of the wrapping controls group
               // (fixed flex item at the row end) so it can never be clipped.
               h(
@@ -5236,6 +5410,25 @@ window.__ModuleLoader__.load({
                     ? 'Enter 发送 · Shift+Enter 换行 · ComfyUI 工作流模式'
                     : 'Enter 发送 · Shift+Enter 换行 · 支持粘贴图片',
                 ),
+                comfy && vram && (vram.totalBytes > 0 || vram.totalGiB > 0)
+                  ? h(
+                      'span',
+                      { className: 'iw-vram', title: 'ComfyUI 显存占用（模型常驻时会保持高位）' },
+                      h('span', { className: 'iw-vram-text' },
+                        `显存 ${vram.usedGiB}/${vram.totalGiB}G`,
+                      ),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'iw-vram-release',
+                          title: '释放 ComfyUI 占用的显存（包括你在 ComfyUI 里加载的模型）',
+                          onClick: onReleaseVram,
+                        },
+                        '释放',
+                      ),
+                    )
+                  : null,
                 h(
                   'span',
                   { className: 'iw-composer-tips-right' },
@@ -8737,6 +8930,11 @@ window.__ModuleLoader__.load({
       const [agBase, setAgBase] = useState(() => str(agentSettings.agentBaseUrl))
       const [agKey, setAgKey] = useState('')
       const [agModel, setAgModel] = useState(() => str(agentSettings.agentModel))
+      const [agRetention, setAgRetention] = useState(() =>
+        Number.isFinite(Number(agentSettings.agentRetentionDays))
+          ? Number(agentSettings.agentRetentionDays)
+          : 0,
+      )
       const [agProvider, setAgProvider] = useState(() => str(agentSettings.agentDshProvider))
       const [agDshModel, setAgDshModel] = useState(() => str(agentSettings.agentDshModel))
       const [dshModels, setDshModels] = useState(null)
@@ -8853,6 +9051,7 @@ window.__ModuleLoader__.load({
             agentModel: agModel,
             agentDshProvider: agProvider,
             agentDshModel: agDshModel,
+            agentRetentionDays: Number(agRetention) || 0,
             ...(str(agKey).trim() ? { agentApiKey: str(agKey).trim() } : {}),
           })
           setAgKey('')
@@ -8969,6 +9168,28 @@ window.__ModuleLoader__.load({
                   h('input', { className: 'iw-input', type: 'password', value: agKey, placeholder: agentSettings.agentApiKeySet ? '已配置 ' + str(agentSettings.agentApiKeyHint) + '（留空不改）' : 'Agent API Key', onChange: (event) => setAgKey(event.target.value) }),
                   h('input', { className: 'iw-input', value: agModel, placeholder: 'Agent 模型，例如 gpt-4o-mini', onChange: (event) => setAgModel(event.target.value) }),
                 ),
+          ),
+          h(
+            'div',
+            { className: 'iw-agent-settings-grid' },
+            h(Select, {
+              className: 'iw-param-select',
+              value: String(agRetention),
+              options: [
+                { value: '0', label: 'Agent 会话：永久保留' },
+                { value: '1', label: 'Agent 会话：按天清理' },
+                { value: '7', label: 'Agent 会话：按周清理' },
+                { value: '30', label: 'Agent 会话：按月清理' },
+              ],
+              onChange: (value) => setAgRetention(Number(value) || 0),
+            }),
+            h(
+              'span',
+              { className: 'iw-agent-hint' },
+              agRetention > 0
+                ? '超过 ' + agRetention + ' 天未用的 Agent 会话会在启动时自动删除（只删 Agent 会话，不动生图历史）'
+                : 'Agent 会话会一直保留；不想留可以随时在会话里点「清空消息」',
+            ),
           ),
           h(
             'div',
@@ -10758,20 +10979,28 @@ window.__ModuleLoader__.load({
         }
       }
 
-      function openAgentSession(template) {
+      /** v2.7: open (or create) the real agent workspace conversation for a template. */
+      async function openAgentSession(template) {
         if (!isObj(template) || !str(template.id)) return
-        const convId = activeConvRef.current || ''
-        if (!convId) {
-          pushToast('info', '先在工作区选一个会话，再使用 Agent 会话')
-          return
+        try {
+          const data = await rpc('agent.workspace', {
+            templateId: str(template.id),
+            templateName: str(template.name),
+          })
+          const workspace = data && data.workspace ? data.workspace : null
+          const conv = data && data.conversation ? data.conversation : null
+          if (!workspace || !conv) throw new Error('无法创建 Agent 会话')
+          setActiveTab('workspace')
+          setExpanded((previous) => ({ ...previous, [workspace.id]: true }))
+          await refreshData({
+            mode: 'refresh',
+            selectWorkspaceId: workspace.id,
+            selectConversationId: conv.id,
+          })
+          if (data.created) pushToast('success', '已创建 Agent 会话：' + (str(template.name) || '模板'))
+        } catch (error) {
+          pushToast('error', '打开 Agent 会话失败：' + ((error && error.message) || String(error)))
         }
-        setAgentSession({
-          templateId: str(template.id),
-          name: str(template.name) || 'Agent 会话',
-          messages: loadAgentMessages(convId, template.id),
-          busy: false,
-          error: '',
-        })
       }
 
       async function sendAgentMessage(payload) {
@@ -10858,6 +11087,31 @@ window.__ModuleLoader__.load({
         const convId = activeConvRef.current || ''
         setAgentSession({ ...session, messages: [], busy: false, error: '' })
         persistAgentMessages(convId, session.templateId, [])
+      }
+
+      /** v2.7: clear the messages of the current agent conversation. */
+      async function handleClearAgentChat() {
+        const wsId = activeWsRef.current
+        const convId = activeConvRef.current
+        if (!wsId || !convId) return
+        let confirmed = true
+        try {
+          confirmed =
+            typeof window.confirm === 'function'
+              ? window.confirm('清空这个 Agent 会话的所有消息？此操作不可恢复。')
+              : true
+        } catch (error) {
+          confirmed = true
+        }
+        if (!confirmed) return
+        try {
+          await rpc('agent.clear', { workspaceId: wsId, conversationId: convId })
+          await refreshConversationQuiet(wsId, convId)
+          refreshDataSilent({ mode: 'refresh' })
+          pushToast('success', '已清空 Agent 会话消息')
+        } catch (error) {
+          pushToast('error', '清空失败：' + ((error && error.message) || String(error)))
+        }
       }
 
       async function copyAgentText(value) {
@@ -11158,6 +11412,33 @@ window.__ModuleLoader__.load({
         const text = str(prompt).trim()
         if (!text || sending) return
         const wsId = activeWsRef.current
+        // v2.7: agent chat conversations send to the agent channel, not to image generation.
+        if (isAgentConversation(conversationRef.current)) {
+          const agentConvId = activeConvRef.current
+          if (!wsId || !agentConvId) {
+            pushToast('info', '请先选择一个 Agent 会话')
+            return
+          }
+          setSending(true)
+          try {
+            await rpc('agent.send', {
+              workspaceId: wsId,
+              conversationId: agentConvId,
+              text,
+              refIds: refsRef.current.map((ref) => ref.id),
+            })
+            setPrompt('')
+            setRefs([])
+            await refreshConversationQuiet(wsId, agentConvId)
+            refreshDataSilent({ mode: 'refresh' })
+          } catch (error) {
+            pushToast('error', 'Agent 回复失败：' + ((error && error.message) || String(error)))
+            await refreshConversationQuiet(wsId, agentConvId)
+          } finally {
+            if (mountedRef.current) setSending(false)
+          }
+          return
+        }
         if (!wsId) {
           pushToast('info', '请先新建或选择一个工作区')
           return
@@ -11676,7 +11957,15 @@ window.__ModuleLoader__.load({
                     taskCount: taskItems.length,
                     onOpenTasks: () => setTaskPanelOpen(true),
                   }),
-                  h(Canvas, {
+                  isAgentConversation(conversation)
+                    ? h(AgentChatCanvas, {
+                        conversation,
+                        sending,
+                        onClear: handleClearAgentChat,
+                        onInsert: insertFromAgent,
+                        onCopy: copyAgentText,
+                      })
+                    : h(Canvas, {
                     home: homeNode,
                     conversation,
                     conversationLoading,
@@ -11722,6 +12011,7 @@ window.__ModuleLoader__.load({
                     textareaRef,
                     onToast: pushToast,
                     onClearRefs: () => setRefs([]),
+                    agentChat: isAgentConversation(conversation),
                     templates,
                     onUseTemplate: handleUseTemplate,
                     onSaveAsTemplate: handleSaveAsTemplate,

@@ -280,7 +280,10 @@
                                   h(
                                     'span',
                                     { className: 'iw-conv-main' },
-                                    h('span', { className: 'iw-conv-title' }, conversation.title || '新会话'),
+                                    conversation.agentKind
+                        ? h('span', { className: 'iw-conv-agent', title: 'Agent 会话' }, '✨')
+                        : null,
+                      h('span', { className: 'iw-conv-title' }, conversation.title || '新会话'),
                                     h(
                                       'span',
                                       { className: 'iw-conv-time' },

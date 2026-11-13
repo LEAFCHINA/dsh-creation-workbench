@@ -32,7 +32,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-13-host-37'
+export const HOST_BUILD = '2026-11-13-host-38'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -192,8 +192,15 @@ async function dispatchOp(payload, env) {
 
   switch (op) {
     /* ---------------- bootstrap / settings ---------------- */
-    case 'bootstrap':
+    case 'bootstrap': {
+      const rawSettings = await store.readSettingsRaw()
+      if (rawSettings.agentRetentionDays > 0) {
+        await store
+          .purgeAgentConversations(rawSettings.agentRetentionDays)
+          .catch(() => ({ deleted: 0 }))
+      }
       return store.loadBootstrap(serverInfo(env))
+    }
 
     case 'settings.get': {
       const raw = await store.readSettingsRaw()
@@ -337,6 +344,72 @@ async function dispatchOp(payload, env) {
       return agent.probeAgent(env.ctx)
     case 'agent.models':
       return agent.listDshModels(env.ctx)
+
+    /* v2.7: agent chat lives in a real workspace + conversation. */
+    case 'agent.workspace': {
+      const workspace = await store.ensureAgentWorkspace()
+      const templateName = typeof payload.templateName === 'string' ? payload.templateName : ''
+      const templateId = typeof payload.templateId === 'string' ? payload.templateId : ''
+      const existing = templateId
+        ? await store.findAgentConversation(workspace.id, templateId)
+        : null
+      const conversation = existing
+        ? existing
+        : (await store.createAgentConversation(workspace.id, { templateId, templateName }))
+            .conversation
+      return { workspace, conversation, created: !existing }
+    }
+
+    case 'agent.send': {
+      const settings = await store.readSettingsRaw()
+      const workspaceId = payload.workspaceId
+      const conversationId = payload.conversationId
+      const current = await store.getConversation(workspaceId, conversationId)
+      const conv = current && current.conversation ? current.conversation : current
+      const templateId =
+        typeof payload.templateId === 'string' && payload.templateId
+          ? payload.templateId
+          : conv?.meta?.templateId || ''
+      if (!templateId) throw new ApiError('该会话没有绑定 Agent 模板', 'INVALID_REQUEST', 400)
+      const text = typeof payload.text === 'string' ? payload.text.trim() : ''
+      let imageBase64 = typeof payload.imageBase64 === 'string' ? payload.imageBase64 : ''
+      let imageMime = typeof payload.imageMime === 'string' ? payload.imageMime : 'image/png'
+      // v2.7: reuse the composer upload pipeline — refs arrive as uploaded ids.
+      if (!imageBase64 && Array.isArray(payload.refIds) && payload.refIds.length) {
+        const first = payload.refIds.find((id) => typeof id === 'string' && id)
+        if (first) {
+          const loaded = await store.loadRefById(first, '参考图')
+          if (loaded && loaded.bytes) {
+            imageBase64 = Buffer.from(loaded.bytes).toString('base64')
+            imageMime = loaded.meta && loaded.meta.mime ? loaded.meta.mime : imageMime
+          }
+        }
+      }
+      if (!text && !imageBase64) throw new ApiError('请输入内容', 'INVALID_REQUEST', 400)
+      const withUser = await store.appendAgentMessage(workspaceId, conversationId, {
+        role: 'user',
+        text: text || '（图片）',
+      })
+      const history = Array.isArray(withUser.messages) ? withUser.messages : []
+      const messages = history.slice(-16).map((message, index) => ({
+        role: message.role,
+        text: message.text,
+        ...(index === history.slice(-16).length - 1 && imageBase64
+          ? { imageBase64, imageMime }
+          : {}),
+      }))
+      const startedAt = Date.now()
+      const result = await agent.runAgent({ settings, payload: { templateId, messages }, ctx: env.ctx })
+      const withReply = await store.appendAgentMessage(workspaceId, conversationId, {
+        role: 'assistant',
+        text: String(result && result.prompt ? result.prompt : ''),
+        elapsedMs: Date.now() - startedAt,
+      })
+      return { conversation: withReply, prompt: result && result.prompt, model: result && result.model }
+    }
+
+    case 'agent.clear':
+      return store.clearAgentConversation(payload.workspaceId, payload.conversationId)
 
     /* v2.2: prompt template store. */
     case 'template.list':

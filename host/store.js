@@ -252,6 +252,8 @@ export function defaultSettings() {
     // v2.3.1: DSH host model route (provider/model ids).
     agentDshProvider: '',
     agentDshModel: '',
+    // v2.7: auto-delete agent chat conversations older than N days (0 = keep).
+    agentRetentionDays: 0,
     imageDir: '',
     saveDir: '',
     modelCosts: {},
@@ -402,6 +404,10 @@ export function normalizeSettings(raw) {
     agentModel: typeof source.agentModel === 'string' ? source.agentModel.trim() : '',
     agentDshProvider: typeof source.agentDshProvider === 'string' ? source.agentDshProvider.trim().slice(0, 200) : '',
     agentDshModel: typeof source.agentDshModel === 'string' ? source.agentDshModel.trim().slice(0, 200) : '',
+    agentRetentionDays: (() => {
+      const value = Number(source.agentRetentionDays)
+      return Number.isFinite(value) && value > 0 ? Math.min(365, Math.round(value)) : 0
+    })(),
     // CONTRACT 补丁 v1.10: first-run proxy onboarding state.
     proxyAuto: source.proxyAuto === true,
     onboardDone: source.onboardDone === true,
@@ -485,6 +491,7 @@ export function safeSettings(raw) {
     agentModel: settings.agentModel,
     agentDshProvider: settings.agentDshProvider,
     agentDshModel: settings.agentDshModel,
+    agentRetentionDays: settings.agentRetentionDays,
     imageDir: settings.imageDir,
     saveDir: settings.saveDir,
     modelCosts: { ...settings.modelCosts },
@@ -573,6 +580,13 @@ export async function applySettings(body) {
         throw new ApiError('DSH model 必须是字符串', 'INVALID_REQUEST', 400)
       }
       updated.agentDshModel = body.agentDshModel.trim().slice(0, 200)
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'agentRetentionDays')) {
+      const value = Number(body.agentRetentionDays)
+      if (!Number.isFinite(value) || value < 0) {
+        throw new ApiError('Agent 会话保留天数必须是非负数字', 'INVALID_REQUEST', 400)
+      }
+      updated.agentRetentionDays = value > 0 ? Math.min(365, Math.round(value)) : 0
     }
     if (Object.prototype.hasOwnProperty.call(body, 'agentModel')) {
       if (typeof body.agentModel !== 'string') {
@@ -1683,6 +1697,172 @@ async function buildProxyOnboarding(settings) {
     }
   }
   return { mode: 'prompt', candidates, target: detection.target || '' }
+}
+
+/* ------------------------------------------------------------------ */
+/* Agent chat conversations (v2.7)                                     */
+/* ------------------------------------------------------------------ */
+
+/** Workspace that holds agent chat conversations (created on first use). */
+const AGENT_WORKSPACE_NAME = 'Agent 会话'
+const AGENT_MESSAGE_MAX = 400
+const AGENT_TEXT_MAX = 20000
+
+export function isAgentConversation(conv) {
+  return Boolean(conv && isPlainObject(conv.meta) && conv.meta.kind === 'agent')
+}
+
+function normalizeAgentMessage(raw) {
+  if (!isPlainObject(raw)) return null
+  const role = raw.role === 'assistant' ? 'assistant' : raw.role === 'user' ? 'user' : ''
+  if (!role) return null
+  const text = typeof raw.text === 'string' ? raw.text.slice(0, AGENT_TEXT_MAX) : ''
+  if (!text) return null
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : `msg_${Math.random().toString(36).slice(2, 10)}`,
+    role,
+    text,
+    createdAt: typeof raw.createdAt === 'string' && raw.createdAt ? raw.createdAt : nowIso(),
+    ...(Number.isFinite(Number(raw.elapsedMs)) && Number(raw.elapsedMs) > 0
+      ? { elapsedMs: Number(raw.elapsedMs) }
+      : {}),
+  }
+}
+
+/** Find the shared agent workspace, creating it when missing. */
+export async function ensureAgentWorkspace() {
+  const list = await readWorkspaces()
+  const existing = list.find(
+    (item) => isPlainObject(item.meta) && item.meta.kind === 'agent',
+  ) || list.find((item) => item.name === AGENT_WORKSPACE_NAME)
+  if (existing) return existing
+  const created = await createWorkspace(AGENT_WORKSPACE_NAME)
+  return created
+}
+
+/** Create one agent chat conversation bound to a template. */
+export async function createAgentConversation(workspaceId, { title, templateId, templateName } = {}) {
+  assertId(workspaceId, 'ws', '工作区 ID')
+  const ws = await requireWorkspace(workspaceId)
+  const rawTitle = typeof title === 'string' ? title.trim() : ''
+  const label =
+    rawTitle.length > 0
+      ? assertNonEmptyString(rawTitle, '会话标题', { max: 80 })
+      : typeof templateName === 'string' && templateName.trim()
+        ? templateName.trim().slice(0, 40)
+        : 'Agent 会话'
+  const conversationId = await newUniqueId('conv', (id) => pathExists(conversationFile(ws.id, id)))
+  const now = nowIso()
+  const conv = {
+    id: conversationId,
+    workspaceId: ws.id,
+    title: label,
+    folder: folderSegment(label, DEFAULT_CONVERSATION_TITLE),
+    createdAt: now,
+    updatedAt: now,
+    turns: [],
+    messages: [],
+    meta: {
+      kind: 'agent',
+      templateId: typeof templateId === 'string' ? templateId : '',
+      templateName: typeof templateName === 'string' ? templateName.slice(0, 100) : '',
+    },
+  }
+  await withLock(conversationLockKey(ws.id, conversationId), () =>
+    writeJsonAtomic(conversationFile(ws.id, conversationId), conv),
+  )
+  await touchWorkspace(ws.id)
+  await updateSettingsUi({ activeWorkspaceId: ws.id, activeConversationId: conv.id })
+  return { workspace: ws, conversation: conv }
+}
+
+/** Reuse the newest agent conversation of one template inside a workspace. */
+export async function findAgentConversation(workspaceId, templateId) {
+  const records = await readWorkspaceConversationRecords(workspaceId)
+  const candidates = records
+    .filter(
+      (record) =>
+        isAgentConversation(record.conversation) &&
+        (!templateId || record.conversation.meta.templateId === templateId),
+    )
+    .map((record) => record.conversation)
+    .sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')))
+  return candidates[0] || null
+}
+
+/** Append one message and return the persisted conversation. */
+export async function appendAgentMessage(workspaceId, conversationId, message) {
+  assertId(workspaceId, 'ws', '工作区 ID')
+  assertId(conversationId, 'conv', '会话 ID')
+  const clean = normalizeAgentMessage(message)
+  if (!clean) throw new ApiError('消息内容无效', 'INVALID_REQUEST', 400)
+  return withLock(conversationLockKey(workspaceId, conversationId), async () => {
+    const { conv, file } = await readConversationOrThrow(workspaceId, conversationId)
+    if (!Array.isArray(conv.messages)) conv.messages = []
+    conv.messages.push(clean)
+    if (conv.messages.length > AGENT_MESSAGE_MAX) {
+      conv.messages = conv.messages.slice(-AGENT_MESSAGE_MAX)
+    }
+    conv.updatedAt = nowIso()
+    await writeJsonAtomic(file, conv)
+    await touchWorkspace(workspaceId)
+    return conv
+  })
+}
+
+/** Replace the whole message list (used by clear + retry flows). */
+export async function replaceAgentMessages(workspaceId, conversationId, messages) {
+  assertId(workspaceId, 'ws', '工作区 ID')
+  assertId(conversationId, 'conv', '会话 ID')
+  const clean = (Array.isArray(messages) ? messages : [])
+    .map(normalizeAgentMessage)
+    .filter(Boolean)
+    .slice(-AGENT_MESSAGE_MAX)
+  return withLock(conversationLockKey(workspaceId, conversationId), async () => {
+    const { conv, file } = await readConversationOrThrow(workspaceId, conversationId)
+    conv.messages = clean
+    conv.updatedAt = nowIso()
+    await writeJsonAtomic(file, conv)
+    await touchWorkspace(workspaceId)
+    return conv
+  })
+}
+
+/** Clear one agent conversation's messages. */
+export async function clearAgentConversation(workspaceId, conversationId) {
+  return replaceAgentMessages(workspaceId, conversationId, [])
+}
+
+/**
+ * Delete agent conversations older than `retainDays` (0/undefined = keep).
+ * Only conversations whose meta.kind is 'agent' are ever touched, so image
+ * generation history is never auto-deleted.
+ */
+export async function purgeAgentConversations(retainDays) {
+  const days = Number(retainDays)
+  if (!Number.isFinite(days) || days <= 0) return { deleted: 0 }
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+  let deleted = 0
+  const workspaces = await readWorkspaces()
+  for (const workspace of workspaces) {
+    const owned =
+      (isPlainObject(workspace.meta) && workspace.meta.kind === 'agent') ||
+      workspace.name === AGENT_WORKSPACE_NAME
+    if (!owned) continue
+    const records = await readWorkspaceConversationRecords(workspace.id)
+    for (const record of records) {
+      if (!isAgentConversation(record.conversation)) continue
+      const stamp = Date.parse(String(record.conversation.updatedAt || record.conversation.createdAt || ''))
+      if (!Number.isFinite(stamp) || stamp > cutoff) continue
+      try {
+        await fs.rm(record.file, { force: true })
+        deleted += 1
+      } catch {
+        // ignore individual delete failures
+      }
+    }
+  }
+  return { deleted }
 }
 
 export async function loadBootstrap(server) {

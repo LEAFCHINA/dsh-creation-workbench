@@ -662,6 +662,55 @@ try {
   h.env.ctx = undefined
   await h.op('template.delete', { id: dshAgentTplId })
 
+  section('4i. Agent 真实会话（工作区 + 会话 + 消息持久化）')
+  const chatTpl = await h.op('template.save', {
+    name: 'Agent 会话测试',
+    category: 'Agent',
+    kind: 'agent',
+    content: '',
+    variables: [],
+    agent: {
+      inputTypes: ['text'],
+      systemPrompt: '你是提示词工程师',
+      userTemplate: '',
+      outputFormat: 'prompt',
+      model: '',
+    },
+  })
+  const chatTplId = chatTpl?.template?.id
+  const agentWs = await h.op('agent.workspace', { templateId: chatTplId, templateName: '反推提示词' })
+  ok('agent.workspace 创建工作区', typeof agentWs?.workspace?.id === 'string', JSON.stringify(agentWs?.workspace))
+  ok('agent.workspace 创建工作区名为 Agent 会话', /Agent/.test(String(agentWs?.workspace?.name || '')), String(agentWs?.workspace?.name))
+  ok('agent.workspace 创建会话并带 meta', agentWs?.conversation?.meta?.kind === 'agent' && agentWs?.conversation?.meta?.templateId === chatTplId, JSON.stringify(agentWs?.conversation?.meta))
+  const agentConvId = agentWs?.conversation?.id
+  const agentWsId = agentWs?.workspace?.id
+  const againSame = await h.op('agent.workspace', { templateId: chatTplId, templateName: '反推提示词' })
+  ok('同一模板复用已有会话', againSame?.conversation?.id === agentConvId && againSame?.created === false, JSON.stringify(againSame?.created))
+  await h.op('settings.set', { agentSource: 'api', agentBaseUrl: 'http://127.0.0.1:18189/v1', agentApiKey: 'sk-test-agent', agentModel: 'test-model' })
+  const agentSent = await h.op('agent.send', { workspaceId: agentWsId, conversationId: agentConvId, text: '一只猫' })
+  ok('agent.send 返回回复', /测试提示词/.test(agentSent?.prompt || ''), JSON.stringify(agentSent?.prompt))
+  const convAfter = await h.op('conversation.get', { workspaceId: agentWsId, conversationId: agentConvId })
+  const convObj2 = convAfter?.conversation || convAfter
+  ok('会话持久化两条消息', Array.isArray(convObj2?.messages) && convObj2.messages.length === 2, JSON.stringify(convObj2?.messages?.length))
+  ok(
+    '消息顺序为 用户→助手',
+    convObj2?.messages?.[0]?.role === 'user' && convObj2?.messages?.[1]?.role === 'assistant',
+    JSON.stringify((convObj2?.messages || []).map((m) => m.role)),
+  )
+  const sentAgain = await h.op('agent.send', { workspaceId: agentWsId, conversationId: agentConvId, text: '换成狗' })
+  ok('第二轮 agent.send 成功', /测试提示词/.test(sentAgain?.prompt || ''), JSON.stringify(sentAgain?.prompt))
+  const convAfter2 = await h.op('conversation.get', { workspaceId: agentWsId, conversationId: agentConvId })
+  const convObj3 = convAfter2?.conversation || convAfter2
+  ok('两轮后共 4 条消息', convObj3?.messages?.length === 4, JSON.stringify(convObj3?.messages?.length))
+  const clearedConv = await h.op('agent.clear', { workspaceId: agentWsId, conversationId: agentConvId })
+  ok('agent.clear 清空消息', Array.isArray(clearedConv?.messages) && clearedConv.messages.length === 0, JSON.stringify(clearedConv?.messages?.length))
+  const retentionSaved = await h.op('settings.set', { agentRetentionDays: 7 })
+  ok('Agent 会话保留天数可保存', retentionSaved?.agentRetentionDays === 7, JSON.stringify(retentionSaved?.agentRetentionDays))
+  const retentionOff = await h.op('settings.set', { agentRetentionDays: 0 })
+  ok('保留天数可关闭', retentionOff?.agentRetentionDays === 0, JSON.stringify(retentionOff?.agentRetentionDays))
+  await h.op('workspace.delete', { id: agentWsId })
+  await h.op('template.delete', { id: chatTplId })
+
   section('5. 错误路径')
   mockState.failSystemStats = true
   const bad = await h.op('comfy.status')

@@ -424,6 +424,11 @@
       const [agBase, setAgBase] = useState(() => str(agentSettings.agentBaseUrl))
       const [agKey, setAgKey] = useState('')
       const [agModel, setAgModel] = useState(() => str(agentSettings.agentModel))
+      const [agRetention, setAgRetention] = useState(() =>
+        Number.isFinite(Number(agentSettings.agentRetentionDays))
+          ? Number(agentSettings.agentRetentionDays)
+          : 0,
+      )
       const [agProvider, setAgProvider] = useState(() => str(agentSettings.agentDshProvider))
       const [agDshModel, setAgDshModel] = useState(() => str(agentSettings.agentDshModel))
       const [dshModels, setDshModels] = useState(null)
@@ -540,6 +545,7 @@
             agentModel: agModel,
             agentDshProvider: agProvider,
             agentDshModel: agDshModel,
+            agentRetentionDays: Number(agRetention) || 0,
             ...(str(agKey).trim() ? { agentApiKey: str(agKey).trim() } : {}),
           })
           setAgKey('')
@@ -656,6 +662,28 @@
                   h('input', { className: 'iw-input', type: 'password', value: agKey, placeholder: agentSettings.agentApiKeySet ? '已配置 ' + str(agentSettings.agentApiKeyHint) + '（留空不改）' : 'Agent API Key', onChange: (event) => setAgKey(event.target.value) }),
                   h('input', { className: 'iw-input', value: agModel, placeholder: 'Agent 模型，例如 gpt-4o-mini', onChange: (event) => setAgModel(event.target.value) }),
                 ),
+          ),
+          h(
+            'div',
+            { className: 'iw-agent-settings-grid' },
+            h(Select, {
+              className: 'iw-param-select',
+              value: String(agRetention),
+              options: [
+                { value: '0', label: 'Agent 会话：永久保留' },
+                { value: '1', label: 'Agent 会话：按天清理' },
+                { value: '7', label: 'Agent 会话：按周清理' },
+                { value: '30', label: 'Agent 会话：按月清理' },
+              ],
+              onChange: (value) => setAgRetention(Number(value) || 0),
+            }),
+            h(
+              'span',
+              { className: 'iw-agent-hint' },
+              agRetention > 0
+                ? '超过 ' + agRetention + ' 天未用的 Agent 会话会在启动时自动删除（只删 Agent 会话，不动生图历史）'
+                : 'Agent 会话会一直保留；不想留可以随时在会话里点「清空消息」',
+            ),
           ),
           h(
             'div',
@@ -2445,20 +2473,28 @@
         }
       }
 
-      function openAgentSession(template) {
+      /** v2.7: open (or create) the real agent workspace conversation for a template. */
+      async function openAgentSession(template) {
         if (!isObj(template) || !str(template.id)) return
-        const convId = activeConvRef.current || ''
-        if (!convId) {
-          pushToast('info', '先在工作区选一个会话，再使用 Agent 会话')
-          return
+        try {
+          const data = await rpc('agent.workspace', {
+            templateId: str(template.id),
+            templateName: str(template.name),
+          })
+          const workspace = data && data.workspace ? data.workspace : null
+          const conv = data && data.conversation ? data.conversation : null
+          if (!workspace || !conv) throw new Error('无法创建 Agent 会话')
+          setActiveTab('workspace')
+          setExpanded((previous) => ({ ...previous, [workspace.id]: true }))
+          await refreshData({
+            mode: 'refresh',
+            selectWorkspaceId: workspace.id,
+            selectConversationId: conv.id,
+          })
+          if (data.created) pushToast('success', '已创建 Agent 会话：' + (str(template.name) || '模板'))
+        } catch (error) {
+          pushToast('error', '打开 Agent 会话失败：' + ((error && error.message) || String(error)))
         }
-        setAgentSession({
-          templateId: str(template.id),
-          name: str(template.name) || 'Agent 会话',
-          messages: loadAgentMessages(convId, template.id),
-          busy: false,
-          error: '',
-        })
       }
 
       async function sendAgentMessage(payload) {
@@ -2545,6 +2581,31 @@
         const convId = activeConvRef.current || ''
         setAgentSession({ ...session, messages: [], busy: false, error: '' })
         persistAgentMessages(convId, session.templateId, [])
+      }
+
+      /** v2.7: clear the messages of the current agent conversation. */
+      async function handleClearAgentChat() {
+        const wsId = activeWsRef.current
+        const convId = activeConvRef.current
+        if (!wsId || !convId) return
+        let confirmed = true
+        try {
+          confirmed =
+            typeof window.confirm === 'function'
+              ? window.confirm('清空这个 Agent 会话的所有消息？此操作不可恢复。')
+              : true
+        } catch (error) {
+          confirmed = true
+        }
+        if (!confirmed) return
+        try {
+          await rpc('agent.clear', { workspaceId: wsId, conversationId: convId })
+          await refreshConversationQuiet(wsId, convId)
+          refreshDataSilent({ mode: 'refresh' })
+          pushToast('success', '已清空 Agent 会话消息')
+        } catch (error) {
+          pushToast('error', '清空失败：' + ((error && error.message) || String(error)))
+        }
       }
 
       async function copyAgentText(value) {
@@ -2845,6 +2906,33 @@
         const text = str(prompt).trim()
         if (!text || sending) return
         const wsId = activeWsRef.current
+        // v2.7: agent chat conversations send to the agent channel, not to image generation.
+        if (isAgentConversation(conversationRef.current)) {
+          const agentConvId = activeConvRef.current
+          if (!wsId || !agentConvId) {
+            pushToast('info', '请先选择一个 Agent 会话')
+            return
+          }
+          setSending(true)
+          try {
+            await rpc('agent.send', {
+              workspaceId: wsId,
+              conversationId: agentConvId,
+              text,
+              refIds: refsRef.current.map((ref) => ref.id),
+            })
+            setPrompt('')
+            setRefs([])
+            await refreshConversationQuiet(wsId, agentConvId)
+            refreshDataSilent({ mode: 'refresh' })
+          } catch (error) {
+            pushToast('error', 'Agent 回复失败：' + ((error && error.message) || String(error)))
+            await refreshConversationQuiet(wsId, agentConvId)
+          } finally {
+            if (mountedRef.current) setSending(false)
+          }
+          return
+        }
         if (!wsId) {
           pushToast('info', '请先新建或选择一个工作区')
           return
@@ -3363,7 +3451,15 @@
                     taskCount: taskItems.length,
                     onOpenTasks: () => setTaskPanelOpen(true),
                   }),
-                  h(Canvas, {
+                  isAgentConversation(conversation)
+                    ? h(AgentChatCanvas, {
+                        conversation,
+                        sending,
+                        onClear: handleClearAgentChat,
+                        onInsert: insertFromAgent,
+                        onCopy: copyAgentText,
+                      })
+                    : h(Canvas, {
                     home: homeNode,
                     conversation,
                     conversationLoading,
@@ -3409,6 +3505,7 @@
                     textareaRef,
                     onToast: pushToast,
                     onClearRefs: () => setRefs([]),
+                    agentChat: isAgentConversation(conversation),
                     templates,
                     onUseTemplate: handleUseTemplate,
                     onSaveAsTemplate: handleSaveAsTemplate,

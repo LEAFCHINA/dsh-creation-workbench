@@ -651,4 +651,14 @@
 .iw-vram-release{border:none;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:10.5px;cursor:pointer;padding:0 2px;border-radius:4px}
 .iw-vram-release:hover{color:var(--dsw-alias-state-error-primary)}
 
+/* v2.7: agent chat conversation */
+.iw-agent-chat{display:flex;flex-direction:column}
+.iw-agent-chat-inner{display:flex;flex-direction:column;gap:10px;max-width:900px;margin:0 auto;width:100%;grid-template-columns:none}
+.iw-agent-chat-head{display:flex;align-items:center;gap:8px;padding:2px 2px 6px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.iw-agent-chat-title{font-size:13px;font-weight:600}
+.iw-agent-chat-body{display:flex;flex-direction:column;gap:12px;padding:10px 2px;flex:1 1 auto;min-height:0;overflow-y:auto}
+.iw-agent-chat .iw-agent-bubble{max-width:78%}
+.iw-composer.iw-agent-chat-mode .iw-composer-controls{display:none}
+.iw-conv-agent{flex:0 0 auto;font-size:9px;margin-right:3px;filter:saturate(1.2)}
+
 `

@@ -324,7 +324,7 @@ for (const entry of [registered.sidebar[0], registered.main[0]]) {
 }
 
 console.log('\n== 4. 关键实现存在性（静态） ==')
-ok('BUILD 已递增', /2026-11-13-client-m2-36/.test(code))
+ok('BUILD 已递增', /2026-11-13-client-m2-37/.test(code))
 ok('comfy optgroup 文案存在', /ComfyUI 工作流/.test(code))
 ok('动态参数行类名存在', /iw-composer-params/.test(code))
 ok('参数编辑器存在', /ComfyParamEditor/.test(code))
@@ -366,6 +366,11 @@ ok('@ 菜单优先 Agent 模板', /✨ Agent · 会话/.test(code) && /✨ Agent
 ok('显存指示与释放按钮存在', /iw-vram/.test(code) && /释放\/ComfyUI 显存|释放 ComfyUI 占用/.test(code) === false ? /iw-vram-release/.test(code) : true)
 ok('comfy.free 已接线', /rpc\('comfy\.free'\)/.test(code))
 ok('显存字段含原始字节', /totalBytes: num\(raw\.totalBytes/.test(code))
+ok('Agent 会话视图存在', /AgentChatCanvas/.test(code) && /iw-agent-chat-body/.test(code))
+ok('Agent 会话 RPC 已接线', /agent\.workspace/.test(code) && /agent\.send/.test(code) && /agent\.clear/.test(code))
+ok('Agent 会话侧栏徽标', /iw-conv-agent/.test(code))
+ok('Agent 会话保留设置', /Agent 会话：永久保留/.test(code) && /agentRetentionDays/.test(code))
+ok('显存条移入状态栏', /iw-composer-tips/.test(code) && /显存 /.test(code))
 ok('显存文本渲染存在', /iw-vram-text/.test(code) && /显存 /.test(code))
 ok('完成提示带计时', /formatJobTiming/.test(code) && /执行 /.test(code))
 ok('切换会话恢复参数快照', /convParamsRef\.current\[previousId\]/.test(code))

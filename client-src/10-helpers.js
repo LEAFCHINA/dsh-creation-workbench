@@ -645,6 +645,27 @@
       }
     }
 
+      /* ---- v2.7: agent chat conversations -------------------------------- */
+
+      function normalizeAgentMessage(raw) {
+        const source = isObj(raw) ? raw : {}
+        const role = source.role === 'assistant' ? 'assistant' : source.role === 'user' ? 'user' : ''
+        if (!role) return null
+        const text = str(source.text)
+        if (!text) return null
+        return {
+          id: str(source.id),
+          role,
+          text,
+          createdAt: str(source.createdAt),
+          elapsedMs: num(source.elapsedMs, 0),
+        }
+      }
+
+      function isAgentConversation(conv) {
+        return Boolean(conv && isObj(conv.meta) && conv.meta.kind === 'agent')
+      }
+
     function normalizeConversation(raw) {
       const source = isObj(raw) ? raw : {}
       const id = str(source.id)
@@ -656,6 +677,16 @@
         createdAt: str(source.createdAt),
         updatedAt: str(source.updatedAt) || str(source.createdAt),
         turns: (Array.isArray(source.turns) ? source.turns : []).map(normalizeTurn).filter(Boolean),
+        messages: (Array.isArray(source.messages) ? source.messages : [])
+          .map(normalizeAgentMessage)
+          .filter(Boolean),
+        meta: isObj(source.meta)
+          ? {
+              kind: str(source.meta.kind),
+              templateId: str(source.meta.templateId),
+              templateName: str(source.meta.templateName),
+            }
+          : null,
       }
     }
 
@@ -665,6 +696,7 @@
       if (!id) return null
       return {
         id,
+        agentKind: isObj(source.meta) && source.meta.kind === 'agent',
         title: str(source.title) || '新会话',
         createdAt: str(source.createdAt),
         updatedAt: str(source.updatedAt) || str(source.createdAt),

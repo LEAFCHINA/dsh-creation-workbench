@@ -38,6 +38,7 @@
       const fileInputRef = useRef(null)
       // v1.3: refs for the one-time composer layout self-check (no screenshots).
       const composerRef = useRef(null)
+      const agentChat = !!props.agentChat
       // v2.2: `@` template picker state.
       const templateList = Array.isArray(props.templates) ? props.templates : []
       const [atMenu, setAtMenu] = useState({ open: false, query: '', at: -1 })
@@ -878,7 +879,7 @@
           { className: 'iw-composer-wrap' },
           h(
             'div',
-            { className: cx('iw-composer', focused && 'focused', agentTemplate && 'iw-agent-mode'), ref: composerRef },
+            { className: cx('iw-composer', focused && 'focused', agentTemplate && 'iw-agent-mode', agentChat && 'iw-agent-chat-mode'), ref: composerRef },
             agentTemplate ? renderAgentPanel() : atMenu.open ? renderAtMenu() : null,
             refList.length
               ? h(
@@ -912,9 +913,11 @@
               className: 'iw-composer-textarea',
               rows: 1,
               value: prompt,
-              placeholder: comfy
-              ? '描述你想生成的画面（ComfyUI 工作流模式：文字写入绑定的提示词节点）'
-              : '描述你想生成的画面，/ 调用指令，@ 插入提示词模板',
+              placeholder: agentChat
+                ? '和 Agent 对话：描述想法，或粘贴图片让它反推提示词…'
+                : comfy
+                  ? '描述你想生成的画面（ComfyUI 工作流模式：文字写入绑定的提示词节点）'
+                  : '描述你想生成的画面，/ 调用指令，@ 插入提示词模板',
               onChange: (event) => handlePromptInput(event.target.value),
               onKeyDown: handleKeyDown,
               onPaste: handlePaste,
@@ -1137,25 +1140,6 @@
                     })
                   : null,
               ),
-              comfy && vram && (vram.totalBytes > 0 || vram.totalGiB > 0)
-                ? h(
-                    'span',
-                    { className: 'iw-vram', title: 'ComfyUI 显存占用（模型常驻时会保持高位）' },
-                    h('span', { className: 'iw-vram-text' },
-                      `显存 ${vram.usedGiB}/${vram.totalGiB}G`,
-                    ),
-                    h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'iw-vram-release',
-                        title: '释放 ComfyUI 占用的显存（包括你在 ComfyUI 里加载的模型）',
-                        onClick: onReleaseVram,
-                      },
-                      '释放',
-                    ),
-                  )
-                : null,
               // v1.3: send button is a sibling of the wrapping controls group
               // (fixed flex item at the row end) so it can never be clipped.
               h(
@@ -1252,6 +1236,25 @@
                     ? 'Enter 发送 · Shift+Enter 换行 · ComfyUI 工作流模式'
                     : 'Enter 发送 · Shift+Enter 换行 · 支持粘贴图片',
                 ),
+                comfy && vram && (vram.totalBytes > 0 || vram.totalGiB > 0)
+                  ? h(
+                      'span',
+                      { className: 'iw-vram', title: 'ComfyUI 显存占用（模型常驻时会保持高位）' },
+                      h('span', { className: 'iw-vram-text' },
+                        `显存 ${vram.usedGiB}/${vram.totalGiB}G`,
+                      ),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'iw-vram-release',
+                          title: '释放 ComfyUI 占用的显存（包括你在 ComfyUI 里加载的模型）',
+                          onClick: onReleaseVram,
+                        },
+                        '释放',
+                      ),
+                    )
+                  : null,
                 h(
                   'span',
                   { className: 'iw-composer-tips-right' },

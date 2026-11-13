@@ -2,6 +2,20 @@
 
 First public release: **1.2.2**.
 
+## 2.7.0 — Agent 会话就是真实会话
+
+按讨论的方案 B 实现：Agent 模板不再用临时抽屉，而是在侧栏真实创建
+「Agent 会话」工作区 + 会话。
+
+- **`@` 选会话模式的 Agent 模板** → 自动打开/创建该模板专属的 Agent 会话（同一模板复用同一个会话），主区切换成聊天气泡视图（你右它左）。
+- **历史落在磁盘上**：消息存进会话 JSON（`messages` + `meta.kind = 'agent'`），刷新、换会话、重开都在；侧栏会话行带 ✨ 标记。
+- **发送即对话**：`agent.send` 追加用户消息 → 调模型 → 追加助手回复（带耗时）；图片走原有的上传管线（`refIds`），支持粘贴/上传后反推。
+- **每条回复可「送入输入框」**（整段或选中片段），「清空消息」只清这个会话，不动模板与生图历史。
+- **自动清理设置**：模板标签页可设 Agent 会话保留策略（永久 / 按天 / 按周 / 按月）。超期会话在启动时删除，**只删 Agent 会话，永不碰生图历史**。
+- 新增 RPC：`agent.workspace`、`agent.send`、`agent.clear`；设置新增 `agentRetentionDays`。
+- **显存条位置调整**：从输入框控件行移到下方状态栏（`显存 28.2/31.8G · 释放`），不再被误认为输入项。
+
+
 ## 2.6.0
 
 - **Fix: the VRAM indicator never appeared.** The client normalized the ComfyUI

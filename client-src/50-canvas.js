@@ -700,3 +700,148 @@
       )
     }
 
+    /**
+     * v2.7: agent chat conversation view (real workspace conversation).
+     */
+    function AgentChatCanvas(props) {
+      const conversation = props.conversation || null
+      const messages = conversation && Array.isArray(conversation.messages) ? conversation.messages : []
+      const scrollRef = useRef(null)
+      const [selection, setSelection] = useState('')
+
+      useEffect(() => {
+        const element = scrollRef.current
+        if (!element) return
+        element.scrollTop = element.scrollHeight
+      }, [messages.length, conversation && conversation.id, props.sending])
+
+      const capture = () => {
+        try {
+          const selected = String(window.getSelection ? window.getSelection().toString() : '').trim()
+          setSelection(selected)
+        } catch (error) {
+          setSelection('')
+        }
+      }
+
+      return h(
+        'div',
+        { className: 'iw-canvas iw-agent-chat' },
+        h(
+          'div',
+          { className: 'iw-canvas-inner iw-agent-chat-inner' },
+          h(
+            'div',
+            { className: 'iw-agent-chat-head' },
+            h(Icon, { name: 'spark', size: 13 }),
+            h(
+              'span',
+              { className: 'iw-agent-chat-title' },
+              str(conversation && conversation.meta && conversation.meta.templateName) || 'Agent 会话',
+            ),
+            h('span', { className: 'iw-agent-drawer-badge' }, 'Agent 会话'),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'iw-agent-mini',
+                title: '清空这段会话的消息（不影响模板）',
+                onClick: props.onClear,
+              },
+              '清空消息',
+            ),
+          ),
+          messages.length === 0
+            ? h(
+                'div',
+                { className: 'iw-agent-empty' },
+                h(Icon, { name: 'spark', size: 22 }),
+                h('div', null, '这个 Agent 会话还没有消息。'),
+                h(
+                  'div',
+                  { className: 'iw-agent-empty-sub' },
+                  '在下方输入想法或粘贴图片，发送后会按对话记录；历史会保存，下次打开还在。',
+                ),
+              )
+            : h(
+                'div',
+                { className: 'iw-agent-chat-body', ref: scrollRef, onMouseUp: capture },
+                messages.map((message) =>
+                  message.role === 'user'
+                    ? h(
+                        'div',
+                        { key: message.id, className: 'iw-agent-msg iw-agent-msg-user' },
+                        h('div', { className: 'iw-agent-bubble' }, message.text),
+                      )
+                    : h(
+                        'div',
+                        { key: message.id, className: 'iw-agent-msg iw-agent-msg-bot' },
+                        h('div', { className: 'iw-agent-bubble' }, message.text),
+                        h(
+                          'div',
+                          { className: 'iw-agent-msg-actions' },
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              className: 'iw-agent-mini',
+                              onClick: () => props.onInsert(message.text),
+                            },
+                            '送入输入框',
+                          ),
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              className: 'iw-agent-mini',
+                              onClick: () => props.onCopy(message.text),
+                            },
+                            '复制',
+                          ),
+                          message.elapsedMs
+                            ? h(
+                                'span',
+                                { className: 'iw-agent-msg-meta' },
+                                Math.round(message.elapsedMs / 1000) + 's · ' + message.text.length + ' 字',
+                              )
+                            : null,
+                        ),
+                      ),
+                ),
+                props.sending
+                  ? h(
+                      'div',
+                      { className: 'iw-agent-msg iw-agent-msg-bot' },
+                      h(
+                        'div',
+                        { className: 'iw-agent-bubble iw-agent-typing' },
+                        h(Spinner, { size: 12 }),
+                        'Agent 正在思考…',
+                      ),
+                    )
+                  : null,
+              ),
+          selection
+            ? h(
+                'div',
+                { className: 'iw-agent-selection' },
+                h('span', null, '已选中 ' + selection.length + ' 字'),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn iw-btn-primary iw-btn-sm',
+                    onClick: () => props.onInsert(selection),
+                  },
+                  '送入输入框',
+                ),
+                h(
+                  'button',
+                  { type: 'button', className: 'iw-btn iw-btn-sm', onClick: () => setSelection('') },
+                  '取消选择',
+                ),
+              )
+            : null,
+        ),
+      )
+    }
