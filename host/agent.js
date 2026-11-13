@@ -13,6 +13,7 @@ const REV = new URL(import.meta.url).searchParams.get('rev') || '0'
 const util = await import(`./util.js?rev=${encodeURIComponent(REV)}`)
 const provider = await import(`./provider.js?rev=${encodeURIComponent(REV)}`)
 const templates = await import(`./templates.js?rev=${encodeURIComponent(REV)}`)
+const store = await import(`./store.js?rev=${encodeURIComponent(REV)}`)
 
 import { randomUUID } from 'node:crypto'
 
@@ -394,11 +395,17 @@ async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, 
     return { text: text.trim(), finishKind, reasoningChars }
   }
 
-  let result = await attempt({ maxTokens: 2048, effort: lowEffort, timeoutMs: 120000 })
+  const startedAt = Date.now()
+  let result = await attempt({ maxTokens: 4096, effort: lowEffort, timeoutMs: 150000 })
   if (!result.text || result.finishKind === 'max-tokens') {
     // Reasoning-heavy first attempt (or an empty stop): retry with a wider budget.
     result = await attempt({ maxTokens: 8192, effort: lowEffort, timeoutMs: 180000 })
   }
+  void store
+    .logHost(
+      `agent dsh ${provider}/${model} ms=${Date.now() - startedAt} finish=${result.finishKind || '-'} chars=${result.text.length} reasoning=${result.reasoningChars} efforts=[${reasoningEfforts.join(',')}] low=${lowEffort || '-'}`,
+    )
+    .catch(() => {})
   const prompt = result.text
   if (!prompt) {
     const reason =

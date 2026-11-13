@@ -2,6 +2,19 @@
 
 First public release: **1.2.2**.
 
+## 2.3.5
+
+- **Fix: 「DSH 模型返回了空结果」on real photos.** Reasoning-capable models can
+  spend the whole output budget on reasoning and emit no text. The DSH channel now
+  asks for the smallest reasoning effort the model advertises, starts with a
+  4096-token budget and automatically retries once with 8192 when the first answer
+  is empty or truncated. Empty results now explain the cause (reasoning-only /
+  budget exhausted) instead of a bare “请重试”.
+- Each DSH agent call writes one `agent dsh …` line to `logs/host.log`
+  (model, latency, finish reason, chars, reasoning chars, available efforts) for
+  future diagnosis.
+
+
 ## 2.3.4
 
 - **Fix: DSH agent calls failed on providers that require session affinity**
