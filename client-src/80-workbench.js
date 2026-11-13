@@ -2440,6 +2440,13 @@
                   onDeleteConversation: openDeleteConversationDialog,
                   onOpenSettings: () => setSettingsOpen(true),
                   comfyReady: (workflows || []).length > 0,
+                  activeTab,
+                  onSelectTab: setActiveTab,
+                  workflowCount: workflows.length,
+                  templates,
+                  activeTemplateId: templateEdit ? str(templateEdit.id) : '',
+                  onSelectTemplate: handleSelectTemplate,
+                  onNewTemplate: handleNewTemplate,
                 }),
                 h(
                   'div',

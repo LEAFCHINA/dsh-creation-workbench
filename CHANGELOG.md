@@ -2,6 +2,15 @@
 
 First public release: **1.2.2**.
 
+## 2.2.1
+
+- **Fix: activity tabs did nothing** — the workbench did not pass
+  `onSelectTab`/`activeTab` down to the sidebar, so clicking 资产库/模板/工作流 was a
+  no-op. The props are wired now.
+- **Tab bar redesign** — 2×2 grid with nowrap labels (no more vertical
+  "工作 区" wrapping), compact rounded buttons with a clear active state.
+
+
 ## 2.2.0 — prompt templates
 
 - **New 模板 tab**: create / edit / delete reusable prompt templates with a

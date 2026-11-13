@@ -494,8 +494,9 @@
 /* v2.1: activity tabs, workspace home, workflow board */
 .iw-hidden{display:none !important}
 .iw-workspace-view{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0}
-.iw-tabs{display:flex;gap:3px;padding:2px 10px 8px}
-.iw-tab{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border:1px solid transparent;border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11.5px;cursor:pointer}
+.iw-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:2px 10px 10px}
+.iw-tab{display:inline-flex;align-items:center;justify-content:flex-start;gap:6px;height:27px;min-width:0;padding:0 9px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11.5px;cursor:pointer;white-space:nowrap}
+.iw-tab-label{overflow:hidden;text-overflow:ellipsis}
 .iw-tab:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2)}
 .iw-tab.active{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-border-l2);font-weight:600}
 .iw-tab-count{min-width:14px;height:14px;padding:0 4px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 18%,transparent);color:var(--dsw-alias-brand-primary);font-size:9.5px;display:inline-flex;align-items:center;justify-content:center}

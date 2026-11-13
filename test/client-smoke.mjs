@@ -324,7 +324,7 @@ for (const entry of [registered.sidebar[0], registered.main[0]]) {
 }
 
 console.log('\n== 4. 关键实现存在性（静态） ==')
-ok('BUILD 已递增', /2026-11-13-client-m2-29/.test(code))
+ok('BUILD 已递增', /2026-11-13-client-m2-30/.test(code))
 ok('comfy optgroup 文案存在', /ComfyUI 工作流/.test(code))
 ok('动态参数行类名存在', /iw-composer-params/.test(code))
 ok('参数编辑器存在', /ComfyParamEditor/.test(code))
@@ -337,6 +337,7 @@ ok('会话草稿切换恢复存在', /draftRef\.current\[previousId\]/.test(code
 ok('ComfyUI 占位提示已区分', /ComfyUI 工作流模式：文字写入绑定的提示词节点/.test(code))
 ok('会话级工作流/参数快照存在', /conversationParams: convParamsRef\.current/.test(code))
 ok('活动栏四个标签', /WORKBENCH_TABS/.test(code) && /资产库/.test(code) && /工作流/.test(code))
+ok('标签切换回调已接线', /onSelectTab: setActiveTab/.test(code))
 ok('工作区首页问候存在', /现在想干什么呀/.test(code))
 ok('首页生成分类存在', /生成视频/.test(code) && /生成声音/.test(code))
 ok('工作流分类助手存在', /workflowCategoryLabel/.test(code))
