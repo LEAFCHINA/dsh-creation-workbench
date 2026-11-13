@@ -94,6 +94,8 @@
         ? comfyWorkflowIdOf(params.model) || str(params.workflowId)
         : ''
       const activeWorkflow = findWorkflowById(workflowList, activeWorkflowId)
+      // v3.1: ComfyUI workflows with an image slot accept composer images.
+      const imageSlots = workflowImageSpecs(activeWorkflow).length
       const workflowParams =
         activeWorkflow && Array.isArray(activeWorkflow.params) ? activeWorkflow.params : []
       const workflowParamValues = isObj(params.workflowParams) ? params.workflowParams : {}
@@ -849,9 +851,14 @@
             setAgentImageFromFile(files[0])
             return
           }
-          // v1.2: ComfyUI workflows do not accept reference images (v1 scope).
-          if (comfy) {
-            if (onToast) onToast('info', 'ComfyUI 工作流模式暂不支持参考图')
+          // v3.1: ComfyUI workflow mode accepts images when the workflow exposes
+          // an image input slot; otherwise keep the old, explicit refusal.
+          if (comfy && imageSlots === 0) {
+            if (onToast) onToast('info', '该工作流没有启用图像输入槽，不能带参考图')
+            return
+          }
+          if (comfy && refList.length >= imageSlots) {
+            if (onToast) onToast('info', `该工作流只启用了 ${imageSlots} 个图像输入`)
             return
           }
           onAddFiles(files)
@@ -859,9 +866,13 @@
       }
 
       const openFilePicker = () => {
-        // v1.2: reference images are not supported in ComfyUI workflow mode.
-        if (comfy) {
-          if (onToast) onToast('info', 'ComfyUI 工作流模式暂不支持参考图')
+        // v3.1: allowed when the workflow exposes an image input slot.
+        if (comfy && imageSlots === 0) {
+          if (onToast) onToast('info', '该工作流没有启用图像输入槽，不能带参考图')
+          return
+        }
+        if (comfy && refList.length >= imageSlots) {
+          if (onToast) onToast('info', `该工作流只启用了 ${imageSlots} 个图像输入`)
           return
         }
         if (fileInputRef.current) fileInputRef.current.click()
@@ -940,7 +951,7 @@
                       ? 'ComfyUI 工作流模式暂不支持参考图'
                       : '添加参考图（也支持粘贴图片）',
                     onClick: openFilePicker,
-                    disabled: !!uploading || comfy,
+                    disabled: !!uploading || (comfy && imageSlots === 0),
                   },
                   uploading ? h(Spinner, { size: 14 }) : h(Icon, { name: 'plus', size: 16 }),
                 ),
@@ -1168,7 +1179,10 @@
                     ? workflowParams
                         .filter(
                           (spec) =>
-                            spec && spec.role !== 'prompt' && str(spec.key) !== batchParamKey,
+                            spec &&
+                            spec.role !== 'prompt' &&
+                            spec.type !== 'image' &&
+                            str(spec.key) !== batchParamKey,
                         )
                         .map((spec) => renderWorkflowParam(spec))
                     : h(

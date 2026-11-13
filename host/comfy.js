@@ -86,7 +86,7 @@ const OBJECT_INFO_TTL_MS = 5 * 60 * 1000
 const MAX_SUGGESTED_PARAMS = 8
 const MAX_TEXT_PARAM = 20000
 const MAX_PARAM_OPTIONS = 200
-const PARAM_TYPES = ['text', 'int', 'float', 'bool', 'select']
+const PARAM_TYPES = ['text', 'int', 'float', 'bool', 'select', 'image']
 const IMAGE_OUTPUT_CLASSES = new Set(['SaveImage', 'PreviewImage'])
 const VIDEO_OUTPUT_CLASSES = new Set(['VHS_VideoCombine'])
 
@@ -523,6 +523,7 @@ function coerceParamValue(type, options, min, max, raw) {
 }
 
 function defaultParamValue(type, options, min, max, raw) {
+  if (type === 'image') return ''
   if (raw !== undefined && raw !== null) return coerceParamValue(type, options, min, max, raw)
   if (type === 'bool') return false
   if (type === 'int' || type === 'float') return Number.isFinite(min) ? min : 0
@@ -549,7 +550,7 @@ function normalizeParamSpec(raw, index) {
     : String(raw.inputName == null ? '' : raw.inputName).trim()
   if (!inputName || inputName.length > 200) throw new ApiError(`${label}的输入名无效`, 'INVALID_REQUEST', 400)
   const type = PARAM_TYPES.includes(raw.type) ? raw.type : ''
-  if (!type) throw new ApiError(`${label}的类型无效（支持 text/int/float/bool/select）`, 'INVALID_REQUEST', 400)
+  if (!type) throw new ApiError(`${label}的类型无效（支持 text/int/float/bool/select/image）`, 'INVALID_REQUEST', 400)
   const labelText = typeof raw.label === 'string' && raw.label.trim()
     ? raw.label.trim().slice(0, 100)
     : inputName
@@ -567,7 +568,8 @@ function normalizeParamSpec(raw, index) {
   const max = finiteOrNull(raw.max)
   let step = finiteOrNull(raw.step)
   if (step !== null && step <= 0) step = null
-  const role = raw.role === 'prompt' ? 'prompt' : 'normal'
+  // v3.1: an 'image' spec is an image input slot fed by the composer's + button.
+  const role = type === 'image' ? 'image' : raw.role === 'prompt' ? 'prompt' : 'normal'
   const randomize = raw.randomize === true && (type === 'int' || type === 'float')
   return {
     key,
@@ -1017,6 +1019,36 @@ function randomParamValue(spec) {
  * generation; `usedRandom` collects the values actually drawn so the composer
  * can show them after the run.
  */
+/**
+ * v3.1: mute every LoadImage node that is not an enabled image slot.
+ *
+ * ComfyUI's bypass/mute are frontend concepts — the API prompt carries no mode, so
+ * the plugin reproduces "mute" by deleting the node and every reference to it.
+ */
+function muteUnusedImageNodes(graph, keepNodeIds) {
+  const kept = new Set(keepNodeIds)
+  const removed = []
+  for (const [nodeId, node] of Object.entries(graph)) {
+    if (!isPlainObject(node)) continue
+    const classType = String(node.class_type || '')
+    if (!/^LoadImage$/i.test(classType)) continue
+    if (kept.has(nodeId)) continue
+    delete graph[nodeId]
+    removed.push(nodeId)
+  }
+  if (removed.length === 0) return { removed }
+  const removedSet = new Set(removed)
+  for (const node of Object.values(graph)) {
+    if (!isPlainObject(node) || !isPlainObject(node.inputs)) continue
+    for (const [name, value] of Object.entries(node.inputs)) {
+      if (Array.isArray(value) && value.length === 2 && removedSet.has(String(value[0]))) {
+        delete node.inputs[name]
+      }
+    }
+  }
+  return { removed }
+}
+
 function buildWorkflowGraph(template, specs, values, randomizeKeys, usedRandom) {
   const graph = JSON.parse(JSON.stringify(template))
   for (const spec of specs) {
@@ -1304,12 +1336,35 @@ function normalizeGenerationCount(value) {
  *   { model:'comfy:wf_…', n, workflowId, workflowParams, displayName }
  * Returns `{ dialect:'comfyui', mode:'workflow', images:[{bytes,mime,w,h}] }`.
  */
+/** Upload one reference image to ComfyUI's input directory (v3.1). */
+async function uploadImageToComfy(baseUrl, { bytes, name, mime }) {
+  const fileName = String(name || 'reference.png').replace(/[^\w.\-\u4e00-\u9fa5]/g, '_').slice(0, 120) || 'reference.png'
+  const form = new FormData()
+  form.append('image', new Blob([bytes], { type: mime || 'image/png' }), fileName)
+  form.append('overwrite', 'true')
+  const response = await fetch(`${baseUrl}/upload/image`, { method: 'POST', body: form })
+  let data = null
+  try {
+    data = await response.json()
+  } catch {
+    data = null
+  }
+  if (!response.ok || !isPlainObject(data)) {
+    throw new ApiError(
+      `上传参考图到 ComfyUI 失败（HTTP ${response.status}）`,
+      'COMFY_UPLOAD_FAILED',
+      502,
+    )
+  }
+  const stored = String(data.name || fileName)
+  const sub = String(data.subfolder || '')
+  return sub ? `${sub}/${stored}` : stored
+}
+
 export async function generateImages({ settings, params, prompt, refs, signal, onProgress, onQueue }) {
   const baseUrl = store.normalizeComfyBaseUrl(settings?.comfyBaseUrl)
   if (!baseUrl) throw new ApiError('尚未配置 ComfyUI 服务地址，请先在设置中填写', 'INVALID_REQUEST', 400)
-  if (Array.isArray(refs) && refs.length > 0) {
-    throw new ApiError('ComfyUI 工作流模式暂不支持参考图', 'INVALID_REQUEST', 400)
-  }
+
   const rawParams = isPlainObject(params) ? params : {}
   const model = String(rawParams.model || '')
   // v1.2.5: the `comfy:<id>` model prefix wins over a stale workflowId param.
@@ -1333,6 +1388,46 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
   const specification = Array.isArray(workflow.params) ? workflow.params : []
   const count = normalizeGenerationCount(rawParams.n)
   const { values, warnings } = resolveWorkflowValues(specification, rawParams.workflowParams, prompt)
+
+  // v3.1: image input slots. One enabled LoadImage node receives the composer's
+  // image; every other LoadImage is muted for this run.
+  const imageSpecs = specification.filter((spec) => spec && spec.type === 'image')
+  const refList = Array.isArray(refs) ? refs.filter((ref) => ref && ref.bytes) : []
+  if (refList.length > 0 && imageSpecs.length === 0) {
+    throw new ApiError(
+      '该工作流没有启用图像输入槽：请在设置里给 LoadImage 节点勾选「图像输入」后再试',
+      'INVALID_REQUEST',
+      400,
+    )
+  }
+  if (imageSpecs.length > 0 && refList.length === 0) {
+    throw new ApiError('该工作流需要一张图片作为输入，请点输入框的 + 添加图片', 'INVALID_REQUEST', 400)
+  }
+  if (refList.length > imageSpecs.length) {
+    throw new ApiError(
+      `该工作流只启用了 ${imageSpecs.length} 个图像输入，最多只能给 ${imageSpecs.length} 张图`,
+      'INVALID_REQUEST',
+      400,
+    )
+  }
+  if (imageSpecs.length > 0) {
+    for (let index = 0; index < imageSpecs.length; index += 1) {
+      const ref = refList[index]
+      if (!ref) {
+        throw new ApiError(
+          `第 ${index + 1} 个图像输入没有图片，请补齐`,
+          'INVALID_REQUEST',
+          400,
+        )
+      }
+      const uploaded = await uploadImageToComfy(baseUrl, {
+        bytes: ref.bytes,
+        mime: ref.mime,
+        name: ref.name || 'reference.png',
+      })
+      values[imageSpecs[index].key] = uploaded
+    }
+  }
 
   // CONTRACT §2.4 step 6: a batch_size input makes one enqueue for n images.
   const batchSpec = specification.find(
@@ -1389,6 +1484,17 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
       )
       if (isPlainObject(params) && Object.keys(usedRandom).length > 0) {
         params.workflowRandomValues = { ...usedRandom }
+      }
+      if (imageSpecs.length > 0) {
+        const muted = muteUnusedImageNodes(
+          graph,
+          imageSpecs.map((spec) => spec.nodeId),
+        )
+        if (muted.removed.length > 0) {
+          void store
+            .logHost(`comfy mute image nodes: ${muted.removed.join(',')} (kept ${imageSpecs.map((spec) => spec.nodeId).join(',')})`)
+            .catch(() => {})
+        }
       }
       if (onProgress) onProgress(0.1)
       const submittedAt = Date.now()

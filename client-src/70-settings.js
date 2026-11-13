@@ -1451,6 +1451,7 @@
           if (!isObj(spec)) continue
           const matchKey = `${str(spec.nodeId)}.${str(spec.inputName)}`
           if (!isObj(templates[matchKey])) continue
+          if (/^image$/i.test(str(spec.inputName))) continue
           if (!next[matchKey]) added.push(matchKey)
           next[matchKey] = true
         }
@@ -1466,6 +1467,77 @@
         for (const key of Object.keys(selected)) next[key] = false
         setSelected(next)
         setOrder([])
+      }
+
+      /* ---- v3.1: image input slots (LoadImage) --------------------------- */
+
+      const nodeImageInput = (node) =>
+        (node && Array.isArray(node.inputs) ? node.inputs : []).find(
+          (input) => str(input.inputName) === 'image',
+        ) || null
+
+      const isImageSlotNode = (node) =>
+        !!node && /loadimage/i.test(str(node.classType)) && !!nodeImageInput(node)
+
+      const slotKeyOf = (node) => `${str(node.nodeId)}.image`
+
+      const isImageSlot = (matchKey) => {
+        const tpl = isObj(templates[matchKey]) ? templates[matchKey] : null
+        return !!tpl && tpl.type === 'image'
+      }
+
+      const clearImageSlotsExcept = (keepKey) => {
+        setSelected((previous) => {
+          const next = { ...previous }
+          for (const key of Object.keys(next)) {
+            if (key === keepKey) continue
+            if (isImageSlot(key)) next[key] = false
+          }
+          if (keepKey) next[keepKey] = true
+          return next
+        })
+        setTemplates((previous) => {
+          const next = { ...previous }
+          for (const key of Object.keys(next)) {
+            if (key === keepKey) continue
+            if (isImageSlot(key)) {
+              next[key] = { ...next[key], type: 'text', role: 'normal' }
+            }
+          }
+          if (keepKey) {
+            const current = isObj(next[keepKey]) ? next[keepKey] : {}
+            next[keepKey] = {
+              ...current,
+              type: 'image',
+              role: 'image',
+              label: str(current.label) || '原图',
+            }
+          }
+          return next
+        })
+        if (keepKey) {
+          setOrder((previous) =>
+            previous.indexOf(keepKey) >= 0 ? previous : [...previous, keepKey],
+          )
+        } else {
+          setOrder((previous) => previous.filter((key) => !isImageSlot(key)))
+        }
+      }
+
+      const toggleImageSlot = (node) => {
+        if (busy) return
+        const key = slotKeyOf(node)
+        if (isImageSlot(key) && selected[key]) {
+          setSelected((previous) => ({ ...previous, [key]: false }))
+          setTemplates((previous) => ({
+            ...previous,
+            [key]: { ...(isObj(previous[key]) ? previous[key] : {}), type: 'text', role: 'normal' },
+          }))
+          setOrder((previous) => previous.filter((item) => item !== key))
+          return
+        }
+        clearImageSlotsExcept(key)
+        setError('')
       }
 
       const toggleParam = (matchKey) => {
@@ -1767,7 +1839,46 @@
           h('span', { className: 'iw-comfy-node-id' }, activeNode.classType),
           isOutput ? h('span', { className: 'iw-comfy-picker-badge output' }, '输出节点') : null,
         )
-        const rows = (activeNode.inputs || []).map((input) => renderInputRow(activeNode, input))
+        const imageInput = nodeImageInput(activeNode)
+        const slotKey = slotKeyOf(activeNode)
+        const slotOn = isImageSlotNode(activeNode) && isImageSlot(slotKey) && !!selected[slotKey]
+        const imageSlotBlock = isImageSlotNode(activeNode)
+          ? h(
+              'div',
+              { key: 'image-slot', className: 'iw-comfy-image-slot' },
+              h(
+                'label',
+                { className: 'iw-param-check' },
+                h('input', {
+                  type: 'checkbox',
+                  checked: slotOn,
+                  disabled: busy,
+                  onChange: () => toggleImageSlot(activeNode),
+                }),
+                h('span', { className: 'iw-comfy-input-name' }, '图像输入（接收对话框的图片）'),
+              ),
+              h(
+                'div',
+                { className: 'iw-field-hint' },
+                slotOn
+                  ? '已启用：对话框的 + 会替换这个 LoadImage，其余 LoadImage 节点在生成时自动静音。'
+                  : '勾选后，对话框的 + 可提供一张图片；现在只用 1 个槽。',
+              ),
+              slotOn
+                ? h('input', {
+                    className: 'iw-input iw-comfy-input-label',
+                    value: str(isObj(templates[slotKey]) ? templates[slotKey].label : ''),
+                    placeholder: '原图',
+                    disabled: busy,
+                    title: '在对话框中显示的参数名',
+                    onChange: (event) => updateTemplate(slotKey, { label: event.target.value }),
+                  })
+                : null,
+            )
+          : null
+        const rows = (activeNode.inputs || [])
+          .filter((input) => !(isImageSlotNode(activeNode) && str(input.inputName) === (imageInput ? str(imageInput.inputName) : '')))
+          .map((input) => renderInputRow(activeNode, input))
         if (!rows.length) {
           rows.push(
             h(
@@ -1777,12 +1888,12 @@
             ),
           )
         }
-        return h(React.Fragment, null, head, ...rows)
+        return h(React.Fragment, null, head, imageSlotBlock, ...rows)
       }
 
       // v1.2.5: preview of the composer param row. Drag to reorder (HTML5 DnD),
       // with ↑↓ buttons as a keyboard/no-drag fallback; ✕ unchecks the param.
-      const orderTypeLabel = { text: '文本', int: '整数', float: '小数', bool: '开关', select: '选项' }
+      const orderTypeLabel = { text: '文本', int: '整数', float: '小数', bool: '开关', select: '选项', image: '图像' }
       const renderOrderChip = (key, index) => {
         const tpl = isObj(templates[key]) ? templates[key] : {}
         const label = str(tpl.label) || str(tpl.inputName) || key

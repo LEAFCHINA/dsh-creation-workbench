@@ -2068,16 +2068,29 @@
           additions.push(ref)
         }
         result.added = additions.length
-        if (result.overflow) pushToast('error', `参考图最多 ${MAX_REFS} 张`)
+        if (result.overflow) pushToast('error', `参考图最多 ${Math.min(MAX_REFS, slots)} 张`)
         if (additions.length) setRefs([...current, ...additions])
         return result
       }
 
+      /** v3.1: how many image inputs the currently selected ComfyUI workflow exposes. */
+      function currentImageSlots() {
+        const current = paramsRef.current
+        if (!isComfyModel(current.model)) return MAX_REFS
+        const workflow = findWorkflowById(workflowsRef.current, comfyWorkflowIdOf(current.model))
+        return workflowImageSpecs(workflow).length
+      }
+
       function handleAddRefFromImage(image) {
         if (!image || !image.id) return
-        // v1.2: reference images are unsupported in ComfyUI workflow mode.
-        if (isComfyModel(paramsRef.current.model)) {
-          pushToast('info', 'ComfyUI 工作流模式暂不支持参考图')
+        const slots = currentImageSlots()
+        if (slots === 0) {
+          pushToast('info', '该工作流没有启用图像输入槽，不能带参考图')
+          setDetail(null)
+          return
+        }
+        if (refsRef.current.length >= slots) {
+          pushToast('info', `该工作流只启用了 ${slots} 个图像输入`)
           setDetail(null)
           return
         }
@@ -2101,9 +2114,9 @@
       }
 
       async function handleAddFiles(files) {
-        // v1.2: reference images are unsupported in ComfyUI workflow mode.
-        if (isComfyModel(paramsRef.current.model)) {
-          pushToast('info', 'ComfyUI 工作流模式暂不支持参考图')
+        const slots = currentImageSlots()
+        if (slots === 0) {
+          pushToast('info', '该工作流没有启用图像输入槽，不能带参考图')
           return
         }
         const list = Array.from(files || []).filter((file) => file && /^image\//.test(file.type || ''))
@@ -2113,7 +2126,7 @@
         }
         const allowed = list.filter((file) => UPLOAD_MIME.indexOf(file.type) >= 0)
         if (allowed.length < list.length) pushToast('info', '仅支持 PNG / JPEG / WebP 图片')
-        const room = MAX_REFS - refsRef.current.length
+        const room = Math.min(MAX_REFS, slots) - refsRef.current.length
         if (room <= 0) {
           pushToast('error', `参考图最多 ${MAX_REFS} 张`)
           return
@@ -2952,9 +2965,25 @@
           setSettingsOpen(true)
           return
         }
-        if (comfySelected && refsRef.current.length) {
-          pushToast('info', 'ComfyUI 工作流模式暂不支持参考图')
-          return
+        if (comfySelected) {
+          const selectedWorkflow = findWorkflowById(
+            workflowsRef.current,
+            comfyWorkflowIdOf(params.model),
+          )
+          const slots = workflowImageSpecs(selectedWorkflow).length
+          const refCount = refsRef.current.length
+          if (refCount > 0 && slots === 0) {
+            pushToast('info', '该工作流没有启用图像输入槽，先移除参考图或在设置里绑定图像输入')
+            return
+          }
+          if (slots > 0 && refCount === 0) {
+            pushToast('info', '该工作流需要一张图片作为输入，请点输入框的 + 添加')
+            return
+          }
+          if (refCount > slots) {
+            pushToast('info', `该工作流只启用了 ${slots} 个图像输入`)
+            return
+          }
         }
         if (!comfySelected && !apiReady()) {
           pushToast('error', '请先在设置中填写生图 API 地址与 API Key')

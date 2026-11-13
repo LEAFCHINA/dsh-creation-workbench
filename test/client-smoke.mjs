@@ -324,7 +324,7 @@ for (const entry of [registered.sidebar[0], registered.main[0]]) {
 }
 
 console.log('\n== 4. 关键实现存在性（静态） ==')
-ok('BUILD 已递增', /2026-11-13-client-m2-39/.test(code))
+ok('BUILD 已递增', /2026-11-13-client-m2-40/.test(code))
 ok('comfy optgroup 文案存在', /ComfyUI 工作流/.test(code))
 ok('动态参数行类名存在', /iw-composer-params/.test(code))
 ok('参数编辑器存在', /ComfyParamEditor/.test(code))
@@ -372,6 +372,9 @@ ok('Agent 会话侧栏徽标', /iw-conv-agent/.test(code))
 ok('Agent 会话保留设置', /Agent 会话：永久保留/.test(code) && /agentRetentionDays/.test(code))
 ok('显存条移入状态栏', /iw-composer-tips/.test(code) && /显存 /.test(code))
 ok('显存文本渲染存在', /iw-vram-text/.test(code) && /显存 /.test(code))
+ok('图像输入槽编辑器存在', /iw-comfy-image-slot/.test(code) && /图像输入（接收对话框的图片）/.test(code))
+ok('图像槽类型已支持', /'image'/.test(code) && /workflowImageSpecs/.test(code))
+ok('ComfyUI 带图校验已接线', /启用图像输入槽/.test(code))
 ok('完成提示带计时', /formatJobTiming/.test(code) && /执行 /.test(code))
 ok('切换会话恢复参数快照', /convParamsRef\.current\[previousId\]/.test(code))
 ok('排队任务显示排队中', /排队中…/.test(code) && /queued/.test(code))

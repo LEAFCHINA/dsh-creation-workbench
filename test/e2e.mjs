@@ -9,6 +9,7 @@ import { startMockComfy, resetState, state as mockState } from './mock-comfy.mjs
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const workflow = JSON.parse(readFileSync(join(HERE, 'sample-workflow.json'), 'utf8'))
+const editWorkflow = JSON.parse(readFileSync(join(HERE, 'sample-edit-workflow.json'), 'utf8'))
 
 let pass = 0
 let fail = 0
@@ -661,6 +662,87 @@ try {
   ok('错误码为 AGENT_MODEL_TEXT_ONLY', textOnlyCode === 'AGENT_MODEL_TEXT_ONLY', textOnlyCode)
   h.env.ctx = undefined
   await h.op('template.delete', { id: dshAgentTplId })
+
+  section('4k. ComfyUI 图像输入槽（编辑工作流）')
+  resetState()
+  const editSaved = await h.op('comfy.workflow.save', {
+    name: '编辑工作流（单图）',
+    category: 'edit',
+    json: editWorkflow,
+    params: [
+      { key: 'p1', nodeId: '6', inputName: 'text', label: '提示词', type: 'text', role: 'prompt' },
+      { key: 'img1', nodeId: '31', inputName: 'image', label: '原图', type: 'image' },
+      { key: 'p2', nodeId: '3', inputName: 'steps', label: '步数', type: 'int', min: 1, max: 100, default: 20 },
+    ],
+  })
+  const editId = editSaved?.workflow?.id
+  ok('图像输入槽保存成功', typeof editId === 'string', JSON.stringify(editSaved?.workflow))
+  const editList = await h.op('comfy.workflow.list')
+  const editItem = (editList?.workflows || []).find((item) => item.id === editId)
+  ok(
+    'list 回传图像槽参数',
+    (editItem?.params || []).some((spec) => spec.type === 'image' && spec.role === 'image'),
+    JSON.stringify(editItem?.params),
+  )
+  const editWs = await h.op('workspace.create', { name: 'edit-e2e' })
+  const editWsId = editWs?.id || editWs?.workspace?.id
+  const editConv = await h.op('conversation.create', { workspaceId: editWsId })
+  const editConvId = editConv?.id || editConv?.conversation?.id
+  const slotPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  const upload = await h.op('upload', { dataBase64: slotPng, name: 'ref.png', mediaType: 'image/png' })
+  const refId = upload?.ref?.id || upload?.id
+  ok('参考图上传成功', typeof refId === 'string', JSON.stringify(upload))
+  const editGen = await h.op('generate', {
+    workspaceId: editWsId,
+    conversationId: editConvId,
+    prompt: '把背景换成雪景',
+    refs: [{ id: refId }],
+    params: {
+      model: `comfy:${editId}`,
+      n: 1,
+      workflowId: editId,
+      workflowParams: { p2: 12 },
+      displayName: '编辑工作流（单图）',
+    },
+  })
+  const editDone = await waitDone(editGen?.jobId)
+  ok('带图的编辑任务完成', editDone?.status === 'done', JSON.stringify(editDone?.error))
+  ok('mock 收到图片上传', (mockState.uploadCalls || 0) > 0, String(mockState.uploadCalls))
+  const editSent = mockState.lastPromptBody?.prompt || {}
+  ok(
+    'LoadImage 31 使用上传的文件名',
+    /mock-upload-/.test(String(editSent['31']?.inputs?.image || '')),
+    JSON.stringify(editSent['31']?.inputs),
+  )
+  ok('未启用的 LoadImage 32 已被静音', !editSent['32'], JSON.stringify(Object.keys(editSent)))
+  let noImageRejected = false
+  try {
+    await h.op('generate', {
+      workspaceId: editWsId,
+      conversationId: editConvId,
+      prompt: '没有图',
+      refs: [],
+      params: { model: `comfy:${editId}`, n: 1, workflowId: editId, workflowParams: {}, displayName: '编辑工作流（单图）' },
+    })
+  } catch (err) {
+    noImageRejected = err.status === 400 && /需要一张图片/.test(String(err.payload?.error || err.message))
+  }
+  ok('缺少图片时给出可读错误', noImageRejected)
+  let textImgRejected = false
+  try {
+    await h.op('generate', {
+      workspaceId: editWsId,
+      conversationId: editConvId,
+      prompt: '文生图带图',
+      refs: [{ id: refId }],
+      params: { model: `comfy:${wfId}`, n: 1, workflowId: wfId, workflowParams: {}, displayName: '测试工作流' },
+    })
+  } catch (err) {
+    textImgRejected = err.status === 400 && /图像输入槽/.test(String(err.payload?.error || err.message))
+  }
+  ok('无图像槽的工作流带图被拒', textImgRejected)
+  await h.op('workspace.delete', { id: editWsId })
+  await h.op('comfy.workflow.delete', { id: editId })
 
   section('4i. Agent 真实会话（工作区 + 会话 + 消息持久化）')
   const chatTpl = await h.op('template.save', {

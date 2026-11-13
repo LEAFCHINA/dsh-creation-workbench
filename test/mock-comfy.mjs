@@ -1,5 +1,5 @@
 // Mock ComfyUI server for host-side end-to-end tests.
-// Endpoints implemented: /system_stats /object_info /prompt /history/:id /view /queue /interrupt /free
+// Endpoints implemented: /system_stats /object_info /prompt /history/:id /view /queue /interrupt /free /upload/image
 import { createServer } from 'node:http'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -88,6 +88,17 @@ export function startMockComfy({ port = 18188 } = {}) {
         system: { os: 'nt', comfyui_version: '0.3.99-mock', python_version: '3.12.0' },
         devices: [{ name: 'mock-cuda:0', type: 'cuda', vram_total: 25757220864, vram_free: 20000000000 }],
       })
+    }
+
+    if (path === '/upload/image' && req.method === 'POST') {
+      state.uploadCalls = (state.uploadCalls || 0) + 1
+      // consume the multipart body so the socket closes cleanly
+      await new Promise((resolve) => {
+        req.on('data', () => {})
+        req.on('end', resolve)
+        req.on('error', resolve)
+      })
+      return send(res, 200, { name: `mock-upload-${state.uploadCalls}.png`, subfolder: '', type: 'input' })
     }
 
     if (path === '/free' && req.method === 'POST') {

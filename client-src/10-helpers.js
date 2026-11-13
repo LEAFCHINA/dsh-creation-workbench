@@ -190,6 +190,12 @@
      * 张数 selector is only shown when this exists — otherwise one prompt run
      * equals one image and a count selector would be misleading.
      */
+    /** v3.1: image input slots (LoadImage nodes exposed as composer image inputs). */
+    function workflowImageSpecs(workflow) {
+      const params = workflow && Array.isArray(workflow.params) ? workflow.params : []
+      return params.filter((spec) => spec && spec.type === 'image')
+    }
+
     function workflowBatchSpec(workflow) {
       const params = workflow && Array.isArray(workflow.params) ? workflow.params : []
       return (
@@ -238,7 +244,12 @@
         max: typeof source.max === 'number' && isFinite(source.max) ? source.max : null,
         step: typeof source.step === 'number' && isFinite(source.step) ? source.step : null,
         default: def,
-        role: source.role === 'prompt' ? 'prompt' : 'normal',
+        role:
+          source.type === 'image'
+            ? 'image'
+            : source.role === 'prompt'
+              ? 'prompt'
+              : 'normal',
         randomize: !!source.randomize,
       }
     }
@@ -280,7 +291,7 @@
 
     /* ---- v1.2 ComfyUI parameter-exposure editor draft ------------------ */
 
-    const COMFY_PARAM_TYPES = ['text', 'int', 'float', 'bool', 'select']
+    const COMFY_PARAM_TYPES = ['text', 'int', 'float', 'bool', 'select', 'image']
 
     function comfyInputTypeOf(input) {
       const source = isObj(input) ? input : {}

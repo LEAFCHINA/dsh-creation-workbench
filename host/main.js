@@ -33,7 +33,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-13-host-41'
+export const HOST_BUILD = '2026-11-13-host-42'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -607,9 +607,41 @@ async function handleGenerateOp(payload) {
 
   const rawRefs = payload.refs === undefined || payload.refs === null ? [] : payload.refs
   if (!Array.isArray(rawRefs)) throw new ApiError('参考图列表（refs）必须是数组', 'INVALID_REQUEST', 400)
-  // CONTRACT 补丁 v1.2 §2.5: v1 ComfyUI workflows do not accept reference images.
-  if (isComfy && rawRefs.length > 0) {
-    throw new ApiError('ComfyUI 工作流模式暂不支持参考图', 'INVALID_REQUEST', 400)
+  // v3.1: ComfyUI workflows accept images only when they expose an image input slot;
+  // ComfyUI-side validation (getImagesSpecs) reports the precise reason otherwise.
+  // v3.1: image input slots — validate before queueing so the composer gets an
+  // immediate, readable error instead of an async job failure.
+  if (isComfy) {
+    const workflowId = String(params.workflowId || '')
+    let slots = 0
+    if (workflowId) {
+      try {
+        const found = await comfy.getWorkflow(workflowId)
+        const specs = found && found.workflow && Array.isArray(found.workflow.params)
+          ? found.workflow.params
+          : []
+        slots = specs.filter((spec) => spec && spec.type === 'image').length
+      } catch {
+        slots = 0
+      }
+    }
+    if (rawRefs.length > 0 && slots === 0) {
+      throw new ApiError(
+        '该工作流没有启用图像输入槽：请在设置里给 LoadImage 节点勾选「图像输入」后再试',
+        'INVALID_REQUEST',
+        400,
+      )
+    }
+    if (slots > 0 && rawRefs.length === 0) {
+      throw new ApiError('该工作流需要一张图片作为输入，请点输入框的 + 添加图片', 'INVALID_REQUEST', 400)
+    }
+    if (rawRefs.length > slots) {
+      throw new ApiError(
+        `该工作流只启用了 ${slots} 个图像输入，最多只能给 ${slots} 张图`,
+        'INVALID_REQUEST',
+        400,
+      )
+    }
   }
   if (rawRefs.length > MAX_REFS) throw new ApiError(`参考图最多 ${MAX_REFS} 张`, 'INVALID_REQUEST', 400)
   const refsMeta = []
