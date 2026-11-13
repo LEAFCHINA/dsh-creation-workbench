@@ -711,6 +711,16 @@ try {
   await h.op('workspace.delete', { id: agentWsId })
   await h.op('template.delete', { id: chatTplId })
 
+  section('4j. DSH 工作区/会话关联（无宿主服务时安全降级）')
+  const linkNoCtx = await h.op('agent.link', { templateId: 'tpl_test0001', templateName: '测试' })
+  ok(
+    '无宿主服务时返回可读失败而非抛错',
+    linkNoCtx?.ok === false && /不支持|无法/.test(String(linkNoCtx?.error || '')),
+    JSON.stringify(linkNoCtx),
+  )
+  const linkGet = await h.op('agent.link.get', {})
+  ok('agent.link.get 返回映射表', !!linkGet?.links && typeof linkGet.links === 'object', JSON.stringify(linkGet?.links))
+
   section('5. 错误路径')
   mockState.failSystemStats = true
   const bad = await h.op('comfy.status')

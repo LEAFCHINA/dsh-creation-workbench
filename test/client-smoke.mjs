@@ -324,7 +324,7 @@ for (const entry of [registered.sidebar[0], registered.main[0]]) {
 }
 
 console.log('\n== 4. 关键实现存在性（静态） ==')
-ok('BUILD 已递增', /2026-11-13-client-m2-37/.test(code))
+ok('BUILD 已递增', /2026-11-13-client-m2-38/.test(code))
 ok('comfy optgroup 文案存在', /ComfyUI 工作流/.test(code))
 ok('动态参数行类名存在', /iw-composer-params/.test(code))
 ok('参数编辑器存在', /ComfyParamEditor/.test(code))
@@ -370,6 +370,7 @@ ok('Agent 会话视图存在', /AgentChatCanvas/.test(code) && /iw-agent-chat-bo
 ok('Agent 会话 RPC 已接线', /agent\.workspace/.test(code) && /agent\.send/.test(code) && /agent\.clear/.test(code))
 ok('Agent 会话侧栏徽标', /iw-conv-agent/.test(code))
 ok('Agent 会话保留设置', /Agent 会话：永久保留/.test(code) && /agentRetentionDays/.test(code))
+ok('DSH 会话关联已接线', /agent\.link/.test(code) && /iw-agent-link/.test(code) && /已关联 DSH 会话/.test(code))
 ok('显存条移入状态栏', /iw-composer-tips/.test(code) && /显存 /.test(code))
 ok('显存文本渲染存在', /iw-vram-text/.test(code) && /显存 /.test(code))
 ok('完成提示带计时', /formatJobTiming/.test(code) && /执行 /.test(code))

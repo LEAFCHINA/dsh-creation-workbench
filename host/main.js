@@ -25,6 +25,7 @@ const jobs = await import(`./jobs.js?rev=${encodeURIComponent(REV)}`)
 const comfy = await import(`./comfy.js?rev=${encodeURIComponent(REV)}`)
 const templates = await import(`./templates.js?rev=${encodeURIComponent(REV)}`)
 const agent = await import(`./agent.js?rev=${encodeURIComponent(REV)}`)
+const dshLink = await import(`./dsh-link.js?rev=${encodeURIComponent(REV)}`)
 const proxyTransport = await import(`./proxy.js?rev=${encodeURIComponent(REV)}`)
 const localfs = await import(`./localfs.js?rev=${encodeURIComponent(REV)}`)
 const costs = await import(`./costs.js?rev=${encodeURIComponent(REV)}`)
@@ -32,7 +33,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-13-host-39'
+export const HOST_BUILD = '2026-11-13-host-40'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -344,6 +345,12 @@ async function dispatchOp(payload, env) {
       return agent.probeAgent(env.ctx)
     case 'agent.models':
       return agent.listDshModels(env.ctx)
+
+    /* v3.0: associate an agent template with a real DSH workspace/session. */
+    case 'agent.link':
+      return dshLink.ensureDshSession(env.ctx, payload)
+    case 'agent.link.get':
+      return dshLink.listDshLinks(env.ctx, payload)
 
     /* v2.7: agent chat lives in a real workspace + conversation. */
     case 'agent.workspace': {
