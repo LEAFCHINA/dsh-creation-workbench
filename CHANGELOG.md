@@ -2,6 +2,17 @@
 
 First public release: **1.2.2**.
 
+## 2.3.1
+
+- **DSH host model channel for ✨ Agent templates**: choose 「DSH 模型」 as the
+  agent source, pick a provider/model (loaded live from the host via
+  `ctx.llm.listModels()`), and generate prompt text without configuring an API
+  key. The call uses DSH's `prepareCall` → `stream` protocol with a 180 s
+  timeout; text input only (image reverse-engineering still needs the Agent API).
+- New RPC `agent.models` returns the DSH providers/models for the settings UI.
+- Agent settings now remember `agentDshProvider` / `agentDshModel`.
+
+
 ## 2.3.0 — ✨ Agent templates
 
 - **Agent templates**: a template can now be a ✨ Agent template with its own

@@ -799,6 +799,8 @@
         agentApiKeySet: !!source.agentApiKeySet,
         agentApiKeyHint: str(source.agentApiKeyHint),
         agentModel: str(source.agentModel),
+        agentDshProvider: str(source.agentDshProvider),
+        agentDshModel: str(source.agentDshModel),
         modelCosts: normalizeModelCosts(source.modelCosts),
         envFallback: !!source.envFallback,
       }

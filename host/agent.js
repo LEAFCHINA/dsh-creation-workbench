@@ -14,6 +14,8 @@ const util = await import(`./util.js?rev=${encodeURIComponent(REV)}`)
 const provider = await import(`./provider.js?rev=${encodeURIComponent(REV)}`)
 const templates = await import(`./templates.js?rev=${encodeURIComponent(REV)}`)
 
+import { randomUUID } from 'node:crypto'
+
 const { ApiError, isPlainObject } = util
 
 const DEFAULT_SYSTEM_PROMPT =
@@ -91,6 +93,175 @@ function buildUserContent(template, text, imageBase64, imageMime) {
   ]
 }
 
+function getLlm(ctx) {
+  try {
+    if (!ctx) return null
+    if (typeof ctx.get === 'function') return ctx.get('llm') || null
+    return ctx.llm || null
+  } catch {
+    return null
+  }
+}
+
+/** List DSH host providers/models for the Agent settings UI. */
+export async function listDshModels(ctx) {
+  const llm = getLlm(ctx)
+  if (!llm) {
+    return {
+      ok: false,
+      error: '当前环境没有可用的 DSH 模型服务（仅桌面端支持）',
+      providers: [],
+      models: [],
+    }
+  }
+  const providers = []
+  let models = []
+  try {
+    const list = typeof llm.listProviders === 'function' ? llm.listProviders() : []
+    for (const provider of list) {
+      let providerModels = []
+      try {
+        const raw = await llm.listModels(provider.id)
+        providerModels = (Array.isArray(raw) ? raw : []).map((model) => ({
+          id: String(model.id || ''),
+          name: String(model.name || model.id || ''),
+          inputModalities: Array.isArray(model.inputModalities) ? model.inputModalities : [],
+        }))
+      } catch {
+        providerModels = []
+      }
+      providers.push({
+        id: String(provider.id || ''),
+        name: String(provider.name || provider.id || ''),
+        models: providerModels,
+      })
+      for (const model of providerModels) {
+        models.push({ provider: String(provider.id || ''), id: model.id, name: model.name })
+      }
+    }
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error), providers: [], models: [] }
+  }
+  return { ok: true, providers, models }
+}
+
+/** Execute one ✨ template through the DSH host LLM service. */
+async function runDshAgent({ ctx, settings, template, agent, text, imageBase64 }) {
+  const llm = getLlm(ctx)
+  if (!llm) {
+    throw new ApiError(
+      '当前环境没有可用的 DSH 模型服务（仅桌面端支持），请切换到 Agent API',
+      'AGENT_DSH_UNAVAILABLE',
+      400,
+    )
+  }
+  if (imageBase64) {
+    throw new ApiError(
+      'DSH 模型通道暂只支持文字输入；图片反推请使用 Agent API',
+      'INVALID_REQUEST',
+      400,
+    )
+  }
+  let provider = String(settings?.agentDshProvider || '').trim()
+  let model = String(settings?.agentDshModel || '').trim()
+  if (!provider || !model) {
+    try {
+      const providers = typeof llm.listProviders === 'function' ? llm.listProviders() : []
+      for (const item of providers) {
+        let models = []
+        try {
+          models = await llm.listModels(item.id)
+        } catch {
+          models = []
+        }
+        if (Array.isArray(models) && models.length) {
+          provider = String(item.id)
+          model = String(models[0].id)
+          break
+        }
+      }
+    } catch {
+      // fall through to the readable error below
+    }
+  }
+  if (!provider || !model) {
+    throw new ApiError(
+      'DSH 没有可用模型，请先在 DSH 设置里配置模型，或改用 Agent API',
+      'AGENT_DSH_UNAVAILABLE',
+      400,
+    )
+  }
+  const systemPrompt =
+    typeof agent.systemPrompt === 'string' && agent.systemPrompt.trim()
+      ? agent.systemPrompt.trim()
+      : DEFAULT_SYSTEM_PROMPT
+  const userText = buildUserContent(template, text, '', '')
+  const messages = [
+    {
+      id: randomUUID(),
+      role: 'user',
+      content: [{ type: 'text', text: userText }],
+      source: { kind: 'creation-workbench-agent' },
+    },
+  ]
+  const signal = AbortSignal.timeout(180000)
+  let call
+  try {
+    call = await llm.prepareCall({ provider, model, maxTokens: 1200 }, signal)
+  } catch (error) {
+    throw new ApiError(
+      `DSH 模型准备失败（${provider}/${model}）：${String(error?.message || error)}`,
+      'AGENT_DSH_FAILED',
+      502,
+    )
+  }
+  let output = ''
+  try {
+    const options = {
+      ...call.config,
+      messages,
+      system: systemPrompt,
+      purpose: 'prompt-template',
+      signal,
+    }
+    for await (const chunk of call.stream(options)) {
+      if (!chunk || typeof chunk !== 'object') continue
+      if (chunk.type === 'text-delta' && typeof chunk.text === 'string') {
+        output += chunk.text
+      } else if (chunk.type === 'finish') {
+        const reason = chunk.reason
+        if (reason && reason.kind === 'aborted') {
+          throw new ApiError('DSH 模型调用已中止', 'AGENT_ABORTED', 499)
+        }
+        if (reason && reason.kind === 'error') {
+          throw new ApiError(
+            `DSH 模型调用失败：${String(reason.failure?.message || '未知错误')}`,
+            'AGENT_DSH_FAILED',
+            502,
+          )
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(
+      `DSH 模型调用失败：${String(error?.message || error)}`,
+      'AGENT_DSH_FAILED',
+      502,
+    )
+  }
+  const prompt = output.trim()
+  if (!prompt) {
+    throw new ApiError('DSH 模型返回了空结果，请重试', 'AGENT_EMPTY', 502)
+  }
+  return {
+    prompt,
+    model: `${provider}/${model}`,
+    source: 'dsh',
+    outputFormat: agent.outputFormat === 'prompt_negative' ? 'prompt_negative' : 'prompt',
+  }
+}
+
 export async function runAgent({ settings, payload, ctx } = {}) {
   const body = isPlainObject(payload) ? payload : {}
   const template = await templates.getTemplate(body.templateId)
@@ -116,8 +287,7 @@ export async function runAgent({ settings, payload, ctx } = {}) {
     throw new ApiError('图片过大，请换一张小一点的图片（≤ 6MB）', 'INVALID_REQUEST', 400)
   }
   if (settings?.agentSource === 'dsh') {
-    const probe = await probeAgent(ctx)
-    throw new ApiError(probe.hint, 'AGENT_DSH_UNAVAILABLE', 400)
+    return runDshAgent({ ctx, settings, template, agent, text, imageBase64 })
   }
   const systemPrompt =
     typeof agent.systemPrompt === 'string' && agent.systemPrompt.trim()

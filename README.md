@@ -29,7 +29,7 @@ ComfyUI workflows in the composer — the exposed node inputs become wrapping co
 - **Activity tabs & workspace home** — 工作区 / 资产库 / 模板 / 工作流 tabs; an empty workspace greets you with 「编辑 / 生成」 (生成图片 / 视频 / 声音 / 模型) and pre-selects the right workflow.
 - **Workflow categories** — every ComfyUI workflow is classified (编辑 / 生图 / 生视频 / 生音频 / 生模型 or custom), shown grouped in the composer dropdown and the 工作流 tab.
 - **Prompt templates** — save reusable prompts with `{{变量}}` placeholders, categories and optional workflow binding; type `@` in the composer to search and insert them, or click 「存为模板」 to capture the current text.
-- **✨ Agent templates** — mark a template as Agent with a system prompt and input types (text / image); picking it in `@` opens agent mode, where an OpenAI-compatible model expands your idea or reverse-engineers an image into a prompt for confirmation. Agent connection settings live in the 模板 tab.
+- **✨ Agent templates** — mark a template as Agent with a system prompt and input types (text / image); picking it in `@` opens agent mode, where an OpenAI-compatible model expands your idea or reverse-engineers an image into a prompt for confirmation. Agent connection settings live in the 模板 tab, and 「DSH 模型」 can use the host's current model without an API key (text only; image reverse-engineering needs the API channel).
 - **Prompt binding** — one exposed text input is explicitly bound to the composer, so the prompt you type always reaches the workflow. Unbound workflows show a clickable warning instead of silently dropping the text.
 - **Multi-image, cancel/timeout, retry, image detail view**.
 - **Local files** — configurable image directory, save-as, open folder, copy path.

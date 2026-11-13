@@ -249,6 +249,9 @@ export function defaultSettings() {
     agentBaseUrl: '',
     agentApiKey: '',
     agentModel: '',
+    // v2.3.1: DSH host model route (provider/model ids).
+    agentDshProvider: '',
+    agentDshModel: '',
     imageDir: '',
     saveDir: '',
     modelCosts: {},
@@ -397,6 +400,8 @@ export function normalizeSettings(raw) {
     agentBaseUrl: typeof source.agentBaseUrl === 'string' ? source.agentBaseUrl.trim() : '',
     agentApiKey: typeof source.agentApiKey === 'string' ? source.agentApiKey.trim() : '',
     agentModel: typeof source.agentModel === 'string' ? source.agentModel.trim() : '',
+    agentDshProvider: typeof source.agentDshProvider === 'string' ? source.agentDshProvider.trim().slice(0, 200) : '',
+    agentDshModel: typeof source.agentDshModel === 'string' ? source.agentDshModel.trim().slice(0, 200) : '',
     // CONTRACT 补丁 v1.10: first-run proxy onboarding state.
     proxyAuto: source.proxyAuto === true,
     onboardDone: source.onboardDone === true,
@@ -478,6 +483,8 @@ export function safeSettings(raw) {
     agentApiKeySet: Boolean(settings.agentApiKey),
     agentApiKeyHint: maskApiKey(settings.agentApiKey),
     agentModel: settings.agentModel,
+    agentDshProvider: settings.agentDshProvider,
+    agentDshModel: settings.agentDshModel,
     imageDir: settings.imageDir,
     saveDir: settings.saveDir,
     modelCosts: { ...settings.modelCosts },
@@ -555,6 +562,18 @@ export async function applySettings(body) {
       if (agentKey.length > 0) updated.agentApiKey = agentKey
     }
     if (body.clearAgentApiKey === true) updated.agentApiKey = ''
+    if (Object.prototype.hasOwnProperty.call(body, 'agentDshProvider')) {
+      if (typeof body.agentDshProvider !== 'string') {
+        throw new ApiError('DSH provider 必须是字符串', 'INVALID_REQUEST', 400)
+      }
+      updated.agentDshProvider = body.agentDshProvider.trim().slice(0, 200)
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'agentDshModel')) {
+      if (typeof body.agentDshModel !== 'string') {
+        throw new ApiError('DSH model 必须是字符串', 'INVALID_REQUEST', 400)
+      }
+      updated.agentDshModel = body.agentDshModel.trim().slice(0, 200)
+    }
     if (Object.prototype.hasOwnProperty.call(body, 'agentModel')) {
       if (typeof body.agentModel !== 'string') {
         throw new ApiError('Agent 模型必须是字符串', 'INVALID_REQUEST', 400)

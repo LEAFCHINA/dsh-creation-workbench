@@ -421,6 +421,10 @@
       const [agBase, setAgBase] = useState(() => str(agentSettings.agentBaseUrl))
       const [agKey, setAgKey] = useState('')
       const [agModel, setAgModel] = useState(() => str(agentSettings.agentModel))
+      const [agProvider, setAgProvider] = useState(() => str(agentSettings.agentDshProvider))
+      const [agDshModel, setAgDshModel] = useState(() => str(agentSettings.agentDshModel))
+      const [dshModels, setDshModels] = useState(null)
+      const [dshBusy, setDshBusy] = useState(false)
       const [agBusy, setAgBusy] = useState(false)
       const [agMsg, setAgMsg] = useState('')
       const [varDrafts, setVarDrafts] = useState({})
@@ -505,6 +509,22 @@
         }
       }
 
+      const loadDshModels = async () => {
+        setDshBusy(true)
+        try {
+          const data = await props.onListDshModels()
+          setDshModels(data || { ok: false, error: '没有返回', providers: [], models: [] })
+        } catch (failure) {
+          setDshModels({ ok: false, error: (failure && failure.message) || String(failure), providers: [], models: [] })
+        } finally {
+          setDshBusy(false)
+        }
+      }
+      useEffect(() => {
+        if (agSource === 'dsh' && !dshModels && !dshBusy) void loadDshModels()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [agSource])
+
       const saveAgentSettings = async () => {
         setAgBusy(true)
         setAgMsg('')
@@ -513,6 +533,8 @@
             agentSource: agSource,
             agentBaseUrl: agBase,
             agentModel: agModel,
+            agentDshProvider: agProvider,
+            agentDshModel: agDshModel,
             ...(str(agKey).trim() ? { agentApiKey: str(agKey).trim() } : {}),
           })
           setAgKey('')
@@ -535,6 +557,14 @@
           setAgBusy(false)
         }
       }
+
+      const dshProviderList = dshModels && Array.isArray(dshModels.providers) ? dshModels.providers : []
+      const providerOptions = dshProviderList.map((provider) => ({ value: provider.id, label: provider.name || provider.id }))
+      const dshModelList =
+        dshModels && Array.isArray(dshModels.models)
+          ? dshModels.models.filter((model) => !agProvider || model.provider === agProvider)
+          : []
+      const dshModelOptions = dshModelList.map((model) => ({ value: model.id, label: model.name || model.id }))
 
       const bindOptions = [
         { value: '', label: '不绑定' },
@@ -586,9 +616,22 @@
               ],
               onChange: setAgSource,
             }),
-            h('input', { className: 'iw-input', value: agBase, placeholder: 'Agent API 地址，例如 https://api.example.com/v1', onChange: (event) => setAgBase(event.target.value) }),
-            h('input', { className: 'iw-input', type: 'password', value: agKey, placeholder: agentSettings.agentApiKeySet ? '已配置 ' + str(agentSettings.agentApiKeyHint) + '（留空不改）' : 'Agent API Key', onChange: (event) => setAgKey(event.target.value) }),
-            h('input', { className: 'iw-input', value: agModel, placeholder: 'Agent 模型，例如 gpt-4o-mini', onChange: (event) => setAgModel(event.target.value) }),
+            agSource === 'dsh'
+              ? h(
+                  React.Fragment,
+                  null,
+                  h(Select, { className: 'iw-param-select', value: agProvider, options: providerOptions, onChange: (value) => { setAgProvider(value); setAgDshModel('') } }),
+                  h(Select, { className: 'iw-param-select', value: agDshModel, options: dshModelOptions, onChange: setAgDshModel }),
+                  h('button', { type: 'button', className: 'iw-btn', disabled: dshBusy, onClick: () => void loadDshModels() }, dshBusy ? '加载中…' : '刷新 DSH 模型'),
+                  h('span', { className: 'iw-agent-hint' }, dshModels && dshModels.ok ? '使用 DSH 当前模型，无需 API Key（文字输入；图片反推请用 Agent API）' : (dshModels && dshModels.error) || '正在读取 DSH 模型…'),
+                )
+              : h(
+                  React.Fragment,
+                  null,
+                  h('input', { className: 'iw-input', value: agBase, placeholder: 'Agent API 地址，例如 https://api.example.com/v1', onChange: (event) => setAgBase(event.target.value) }),
+                  h('input', { className: 'iw-input', type: 'password', value: agKey, placeholder: agentSettings.agentApiKeySet ? '已配置 ' + str(agentSettings.agentApiKeyHint) + '（留空不改）' : 'Agent API Key', onChange: (event) => setAgKey(event.target.value) }),
+                  h('input', { className: 'iw-input', value: agModel, placeholder: 'Agent 模型，例如 gpt-4o-mini', onChange: (event) => setAgModel(event.target.value) }),
+                ),
           ),
           h(
             'div',
@@ -2007,6 +2050,10 @@
         return rpc('agent.probe')
       }
 
+      async function handleListDshModels() {
+        return rpc('agent.models')
+      }
+
       /** v2.1: switch the composer to a ComfyUI workflow and focus the input. */
       async function applyComfyWorkflowId(workflowId) {
         const id = str(workflowId)
@@ -2756,6 +2803,7 @@
                         agentSettings: settings,
                         onSaveAgentConfig: handleSaveAgentConfig,
                         onTestAgent: handleTestAgent,
+                        onListDshModels: handleListDshModels,
                       })
                     : null,
                 ),

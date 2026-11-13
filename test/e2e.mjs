@@ -446,7 +446,10 @@ try {
     agentNoInput = err.status === 400 || err.code === 'INVALID_REQUEST'
   }
   ok('空输入被拒绝', agentNoInput)
-  await h.op('settings.set', { agentSource: 'dsh' })
+  const dshModels = await h.op('agent.models')
+  ok('agent.models 在无 ctx 时返回可读结构', dshModels?.ok === false && typeof dshModels?.error === 'string', JSON.stringify(dshModels))
+  const dshSettings = await h.op('settings.set', { agentSource: 'dsh', agentDshProvider: 'deepseek', agentDshModel: 'deepseek-chat' })
+  ok('DSH 路由设置保存', dshSettings?.agentDshProvider === 'deepseek' && dshSettings?.agentDshModel === 'deepseek-chat', JSON.stringify(dshSettings))
   let dshError = ''
   try {
     await h.op('agent.run', { templateId: agentTplId, input: { text: 'x' } })
@@ -454,7 +457,7 @@ try {
     dshError = String(err?.message || '')
   }
   ok('DSH 通道未适配时给出可读错误', /DSH|模型服务/.test(dshError), dshError)
-  await h.op('settings.set', { agentSource: 'api', agentBaseUrl: '', agentModel: '', clearAgentApiKey: true })
+  await h.op('settings.set', { agentSource: 'api', agentBaseUrl: '', agentModel: '', agentDshProvider: '', agentDshModel: '', clearAgentApiKey: true })
   await h.op('template.delete', { id: agentTplId })
 
   section('5. 错误路径')
