@@ -352,7 +352,7 @@
                           'button',
                           {
                             type: 'button',
-                            className: 'iw-btn danger',
+                            className: 'iw-btn iw-btn-danger',
                             onClick: () => props.onDelete(workflow),
                           },
                           '删除',
@@ -374,6 +374,226 @@
         h('div', { className: 'iw-main-empty-title' }, props.title),
         h('div', { className: 'iw-main-empty-desc' }, props.desc),
         props.badge ? h('div', { className: 'iw-side-tabinfo-badge' }, props.badge) : null,
+      )
+    }
+
+    /**
+     * v2.2: template editor. Detects `{{变量}}` in the content automatically,
+     * lets the user set defaults, shows a rendered preview and can insert the
+     * result straight into the composer.
+     */
+    function TemplateBoard(props) {
+      const selected = isObj(props.template) ? props.template : null
+      const draftKey = selected ? str(selected.id) || 'new-template' : 'no-template'
+      const [name, setName] = useState(() => (selected ? str(selected.name) : ''))
+      const [category, setCategory] = useState(() => (selected ? str(selected.category) : '通用'))
+      const [content, setContent] = useState(() => (selected ? str(selected.content) : ''))
+      const [bindCategory, setBindCategory] = useState(() =>
+        selected ? str(selected.bindWorkflowCategory) : '',
+      )
+      const [varDrafts, setVarDrafts] = useState({})
+      const [busy, setBusy] = useState(false)
+      const [error, setError] = useState('')
+      const loadedKeyRef = useRef('')
+      useEffect(() => {
+        if (loadedKeyRef.current === draftKey) return
+        loadedKeyRef.current = draftKey
+        setName(selected ? str(selected.name) : '')
+        setCategory(selected ? str(selected.category) : '通用')
+        setContent(selected ? str(selected.content) : '')
+        setBindCategory(selected ? str(selected.bindWorkflowCategory) : '')
+        setVarDrafts({})
+        setError('')
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [draftKey])
+
+      const keys = templateVariableKeys(content)
+      const variables = keys.map((key) => {
+        const draft = isObj(varDrafts[key]) ? varDrafts[key] : {}
+        return { key, label: str(draft.label) || key, default: str(draft.default) }
+      })
+      const values = {}
+      for (const variable of variables) values[variable.key] = variable.default
+      const rendered = renderTemplate(content, values)
+
+      const save = async () => {
+        const cleanName = str(name).trim()
+        if (!cleanName) {
+          setError('请填写模板名称')
+          return
+        }
+        if (!str(content).trim()) {
+          setError('模板内容不能为空')
+          return
+        }
+        setBusy(true)
+        setError('')
+        try {
+          await props.onSave({
+            id: selected && selected.id ? selected.id : '',
+            name: cleanName,
+            category: str(category).trim() || '通用',
+            content: str(content),
+            variables,
+            bindWorkflowCategory: bindCategory,
+            tags: [],
+          })
+        } catch (failure) {
+          setError((failure && failure.message) || String(failure))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      const bindOptions = [
+        { value: '', label: '不绑定' },
+        ...WORKFLOW_CATEGORY_ORDER.map((id) => ({
+          value: id,
+          label: WORKFLOW_CATEGORY_LABELS[id] || id,
+        })),
+      ]
+
+      return h(
+        'div',
+        { className: 'iw-template-board' },
+        h(
+          'div',
+          { className: 'iw-board-head' },
+          h(
+            'div',
+            { className: 'iw-board-title' },
+            selected && selected.id ? '编辑模板' : '新建模板',
+          ),
+          h(
+            'div',
+            { className: 'iw-board-sub' },
+            '用 {{变量}} 占位，插入输入框时填写；输入框里打 @ 可快速调用。',
+          ),
+        ),
+        h(
+          'div',
+          { className: 'iw-template-form' },
+          h(
+            Field,
+            { label: '模板名称' },
+            h('input', {
+              className: 'iw-input',
+              value: name,
+              placeholder: '例如：复古胶片人像',
+              onChange: (event) => setName(event.target.value),
+            }),
+          ),
+          h(
+            Field,
+            { label: '分类' },
+            h('input', {
+              className: 'iw-input',
+              value: category,
+              placeholder: '通用 / 人像 / 产品 / 海报 / 风格…',
+              onChange: (event) => setCategory(event.target.value),
+            }),
+          ),
+          h(
+            Field,
+            { label: '绑定工作流分类（可选）' },
+            h(Select, {
+              className: 'iw-param-select',
+              value: bindCategory,
+              options: bindOptions,
+              onChange: (value) => setBindCategory(value),
+            }),
+          ),
+          h(
+            Field,
+            { label: '模板内容' },
+            h('textarea', {
+              className: 'iw-input iw-template-content',
+              rows: 7,
+              value: content,
+              placeholder: '{{主体}}，{{风格}}，35mm 胶片，浅景深，柔和自然光…',
+              onChange: (event) => setContent(event.target.value),
+            }),
+          ),
+          keys.length
+            ? h(
+                Field,
+                { label: '变量默认值' },
+                h(
+                  'div',
+                  { className: 'iw-template-vars' },
+                  variables.map((variable) =>
+                    h(
+                      'label',
+                      { key: variable.key, className: 'iw-template-var' },
+                      h('span', { className: 'iw-template-var-key' }, variable.key),
+                      h('input', {
+                        className: 'iw-input',
+                        value: variable.default,
+                        placeholder: '默认值（可留空）',
+                        onChange: (event) =>
+                          setVarDrafts((previous) => ({
+                            ...previous,
+                            [variable.key]: {
+                              ...previous[variable.key],
+                              default: event.target.value,
+                            },
+                          })),
+                      }),
+                    ),
+                  ),
+                ),
+              )
+            : null,
+          h(
+            'div',
+            { className: 'iw-template-preview' },
+            h('div', { className: 'iw-template-preview-label' }, '预览'),
+            h(
+              'div',
+              { className: 'iw-template-preview-body' },
+              rendered ? rendered : '（还没有内容）',
+            ),
+          ),
+          error ? h('div', { className: 'iw-form-error' }, error) : null,
+          h(
+            'div',
+            { className: 'iw-template-actions' },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'iw-btn iw-btn-primary',
+                disabled: busy,
+                onClick: () => void save(),
+              },
+              busy ? '保存中…' : selected && selected.id ? '保存修改' : '保存模板',
+            ),
+            str(content).trim()
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn',
+                    disabled: busy,
+                    onClick: () => props.onInsert(rendered),
+                  },
+                  '插入输入框',
+                )
+              : null,
+            selected && selected.id
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn iw-btn-danger',
+                    disabled: busy,
+                    onClick: () => props.onDelete(selected.id),
+                  },
+                  '删除',
+                )
+              : null,
+          ),
+        ),
       )
     }
 
@@ -403,6 +623,10 @@
       // v1.2: local ComfyUI workflow list (model dropdown + dynamic params).
       const [workflows, setWorkflows] = useState([])
       const [workflowsLoaded, setWorkflowsLoaded] = useState(false)
+      // v2.2: prompt templates (模板 tab + composer @ picker).
+      const [templates, setTemplates] = useState([])
+      const [templatesLoaded, setTemplatesLoaded] = useState(false)
+      const [templateEdit, setTemplateEdit] = useState(null)
       // v2.1: sidebar activity tab; the main area follows it.
       const [activeTab, setActiveTab] = useState(() => {
         const storedTab = str(storedUiRef.current.activeTab)
@@ -564,6 +788,18 @@
         }
       }
 
+      async function loadTemplates() {
+        try {
+          const data = await rpc('template.list')
+          if (!mountedRef.current) return
+          setTemplates(normalizeTemplateList(data))
+        } catch (error) {
+          reportLog('warn', `template.list failed: ${(error && error.message) || error}`)
+        } finally {
+          if (mountedRef.current) setTemplatesLoaded(true)
+        }
+      }
+
       function syncParamsWithSettings(nextSettings, nextLimits) {
         setParams((previous) => {
           const next = { ...previous }
@@ -682,6 +918,7 @@
         })
         // v1.2: keep the local ComfyUI workflow list in sync with bootstrap.
         loadWorkflows()
+        loadTemplates()
         return { wsId, convId, workspaces: nextWorkspaces, settings: nextSettings }
       }
 
@@ -1471,6 +1708,89 @@
         }
       }
 
+      /** v2.2: template tab + composer integration. */
+      function handleSelectTemplate(id) {
+        const found = (templates || []).find((template) => template.id === id) || null
+        setTemplateEdit(found)
+        setActiveTab('templates')
+      }
+
+      function handleNewTemplate() {
+        setTemplateEdit({
+          id: '',
+          name: '',
+          category: '通用',
+          content: '',
+          variables: [],
+          bindWorkflowCategory: '',
+          bindWorkflowId: '',
+          tags: [],
+          usageCount: 0,
+        })
+        setActiveTab('templates')
+      }
+
+      async function handleSaveTemplate(payload) {
+        const data = await rpc('template.save', payload)
+        const saved = data && data.template ? data.template : null
+        if (saved) setTemplateEdit(normalizeTemplate(saved))
+        await loadTemplates()
+        pushToast('success', payload && payload.id ? '模板已保存' : '模板已创建')
+        return saved
+      }
+
+      async function handleDeleteTemplate(id) {
+        const target = (templates || []).find((template) => template.id === id)
+        let confirmed = true
+        try {
+          confirmed =
+            typeof window.confirm === 'function'
+              ? window.confirm(
+                  `确定删除模板「${str(target && target.name) || '未命名模板'}」？`,
+                )
+              : true
+        } catch (error) {
+          confirmed = true
+        }
+        if (!confirmed) return
+        try {
+          await rpc('template.delete', { id })
+          setTemplateEdit(null)
+          await loadTemplates()
+          pushToast('success', '模板已删除')
+        } catch (error) {
+          pushToast('error', `删除失败：${(error && error.message) || error}`)
+        }
+      }
+
+      function handleInsertTemplate(text) {
+        setActiveTab('workspace')
+        setPrompt(str(text))
+        setTimeout(() => {
+          const textarea = textareaRef.current
+          if (textarea && typeof textarea.focus === 'function') textarea.focus()
+        }, 60)
+      }
+
+      function handleUseTemplate(id) {
+        void rpc('template.touch', { id }).catch(() => {})
+      }
+
+      function handleSaveAsTemplate(text) {
+        setTemplateEdit({
+          id: '',
+          name: '',
+          category: '通用',
+          content: str(text),
+          variables: [],
+          bindWorkflowCategory: '',
+          bindWorkflowId: '',
+          tags: [],
+          usageCount: 0,
+        })
+        setActiveTab('templates')
+      }
+
       /** v2.1: switch the composer to a ComfyUI workflow and focus the input. */
       async function applyComfyWorkflowId(workflowId) {
         const id = str(workflowId)
@@ -2182,6 +2502,9 @@
                     textareaRef,
                     onToast: pushToast,
                     onClearRefs: () => setRefs([]),
+                    templates,
+                    onUseTemplate: handleUseTemplate,
+                    onSaveAsTemplate: handleSaveAsTemplate,
                   }),
                   ),
                   activeTab === 'workflows'
@@ -2202,11 +2525,11 @@
                       })
                     : null,
                   activeTab === 'templates'
-                    ? h(ComingSoon, {
-                        icon: 'spark',
-                        title: '提示词模板',
-                        desc: '保存常用提示词，用 @ 在输入框快速调用。',
-                        badge: 'v2.2 上线',
+                    ? h(TemplateBoard, {
+                        template: templateEdit,
+                        onSave: handleSaveTemplate,
+                        onDelete: handleDeleteTemplate,
+                        onInsert: handleInsertTemplate,
                       })
                     : null,
                 ),

@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-27'
+    const BUILD = '2026-11-13-client-m2-29'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -207,6 +207,7 @@ window.__ModuleLoader__.load({
 .iw-canvas-caption-title{font-size:12px;font-weight:600;color:var(--dsw-alias-label-secondary)}
 .iw-canvas-caption-meta{font-size:11px;color:var(--dsw-alias-label-secondary);opacity:.75}
 .iw-canvas-empty{grid-column:1/-1;display:flex;align-items:center;justify-content:center;min-height:340px}
+.iw-canvas-empty .iw-home{width:100%;max-width:760px}
 .iw-canvas-loading{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--dsw-alias-label-secondary)}
 .iw-canvas-hint{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:72px 20px;text-align:center;color:var(--dsw-alias-label-secondary)}
 .iw-canvas-hint-title{font-size:14px;font-weight:600;color:var(--dsw-alias-label-primary)}
@@ -623,7 +624,8 @@ window.__ModuleLoader__.load({
 .iw-side-tabinfo-title{font-size:12.5px;font-weight:600}
 .iw-side-tabinfo-desc{font-size:11.5px;line-height:1.6;color:var(--dsw-alias-label-secondary)}
 .iw-side-tabinfo-badge{align-self:flex-start;margin-top:2px;padding:1px 7px;border-radius:999px;border:1px dashed var(--dsw-alias-border-l2);font-size:10px;color:var(--dsw-alias-label-secondary)}
-.iw-home{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;flex:1 1 auto;padding:32px 16px;min-height:320px}
+.iw-canvas-home{grid-column:1/-1;display:flex;align-items:center;justify-content:center;min-height:clamp(320px,58vh,620px);padding:8px 0}
+.iw-home{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;width:100%;max-width:760px;padding:24px 16px;text-align:center}
 .iw-home-greet{font-size:19px;font-weight:600;letter-spacing:.2px}
 .iw-home-actions{display:flex;gap:12px}
 .iw-home-action{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 22px;border-radius:10px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13.5px;cursor:pointer;transition:all .12s ease}
@@ -657,6 +659,45 @@ window.__ModuleLoader__.load({
 .iw-comfy-category-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .iw-comfy-category-row .iw-param-select{min-width:120px}
 .iw-comfy-category-row .iw-input{flex:1 1 180px}
+
+/* v2.2: template tab + composer @ picker */
+.iw-composer{position:relative}
+.iw-composer-link{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 7px;border-radius:999px;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;cursor:pointer}
+.iw-composer-link:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2)}
+.iw-at-menu{position:absolute;left:12px;right:12px;bottom:calc(100% + 8px);z-index:40;display:flex;flex-direction:column;gap:2px;padding:8px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-1);box-shadow:0 12px 32px rgba(0,0,0,.28);max-height:320px;overflow:auto}
+.iw-at-head{display:flex;align-items:center;gap:6px;padding:4px 6px 8px;font-size:11px;color:var(--dsw-alias-label-secondary)}
+.iw-at-item{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border:none;border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.iw-at-item:hover,.iw-at-item.active{background:var(--dsw-alias-bg-layer-2)}
+.iw-at-name{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iw-at-cat{font-size:10px;color:var(--dsw-alias-label-secondary)}
+.iw-at-vars{font-size:10px;color:var(--dsw-alias-brand-primary)}
+.iw-at-empty{padding:10px;font-size:11.5px;color:var(--dsw-alias-label-secondary)}
+.iw-at-foot{padding-top:6px;border-top:1px solid var(--dsw-alias-border-l1);margin-top:4px}
+.iw-at-save{width:100%;padding:6px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;border-radius:6px}
+.iw-at-save:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
+.iw-at-var-row{display:flex;align-items:center;gap:8px;padding:2px 4px}
+.iw-at-var-key{flex:0 0 88px;font-size:11.5px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iw-at-var-input{flex:1 1 auto;height:26px;font-size:12px}
+.iw-at-actions{display:flex;justify-content:flex-end;gap:6px;padding:6px 4px 2px}
+.iw-template-side{display:flex;flex-direction:column;gap:8px;padding:0 10px 10px}
+.iw-template-search{height:28px;font-size:11.5px}
+.iw-template-list{display:flex;flex-direction:column;gap:2px}
+.iw-template-item{display:flex;flex-direction:column;gap:2px;width:100%;padding:6px 8px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}
+.iw-template-item:hover{background:var(--dsw-alias-bg-layer-2)}
+.iw-template-item.active{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-border-l2)}
+.iw-template-name{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iw-template-meta{font-size:10px;color:var(--dsw-alias-label-secondary)}
+.iw-template-board{flex:1 1 auto;overflow:auto;padding:20px 24px 28px;display:flex;flex-direction:column;gap:16px}
+.iw-template-form{display:flex;flex-direction:column;gap:12px;max-width:760px}
+.iw-template-content{min-height:150px;resize:vertical;line-height:1.6;font-size:12.5px;width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-family:inherit}
+.iw-template-vars{display:flex;flex-direction:column;gap:6px}
+.iw-template-var{display:flex;align-items:center;gap:8px}
+.iw-template-var-key{flex:0 0 110px;font-size:11.5px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iw-template-var .iw-input{flex:1 1 auto;height:28px;font-size:12px}
+.iw-template-preview{display:flex;flex-direction:column;gap:5px;padding:10px 12px;border:1px dashed var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
+.iw-template-preview-label{font-size:10.5px;color:var(--dsw-alias-label-secondary)}
+.iw-template-preview-body{font-size:12.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
+.iw-template-actions{display:flex;gap:8px;flex-wrap:wrap}
 
 `
 /* ===== 10-helpers.js ===== */
@@ -1510,6 +1551,70 @@ window.__ModuleLoader__.load({
       return images.length >= 2
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Prompt templates (v2.2)                                             */
+    /* ------------------------------------------------------------------ */
+
+    const TEMPLATE_VAR_RE = /\{\{([^{}]{1,40})\}\}/g
+
+    function normalizeTemplate(raw) {
+      const source = isObj(raw) ? raw : {}
+      const content = str(source.content)
+      return {
+        id: str(source.id),
+        name: str(source.name) || '未命名模板',
+        category: str(source.category) || '通用',
+        content,
+        variables: Array.isArray(source.variables)
+          ? source.variables
+              .filter((item) => isObj(item) && str(item.key))
+              .map((item) => ({
+                key: str(item.key),
+                label: str(item.label) || str(item.key),
+                default: str(item.default),
+              }))
+          : [],
+        bindWorkflowCategory: str(source.bindWorkflowCategory),
+        bindWorkflowId: str(source.bindWorkflowId),
+        tags: Array.isArray(source.tags) ? source.tags.filter((tag) => str(tag)) : [],
+        usageCount: num(source.usageCount, 0),
+        createdAt: str(source.createdAt),
+        updatedAt: str(source.updatedAt),
+      }
+    }
+
+    function normalizeTemplateList(raw) {
+      const list = Array.isArray(raw) ? raw : isObj(raw) && Array.isArray(raw.templates) ? raw.templates : []
+      return list.map(normalizeTemplate).filter((template) => template.id)
+    }
+
+    /** Variable keys used by the content, in first-appearance order. */
+    function templateVariableKeys(content) {
+      const keys = []
+      const text = str(content)
+      TEMPLATE_VAR_RE.lastIndex = 0
+      let match = TEMPLATE_VAR_RE.exec(text)
+      while (match) {
+        if (keys.indexOf(match[1]) < 0) keys.push(match[1])
+        match = TEMPLATE_VAR_RE.exec(text)
+      }
+      return keys
+    }
+
+    function renderTemplate(content, values) {
+      const map = isObj(values) ? values : {}
+      return str(content).replace(TEMPLATE_VAR_RE, (whole, key) =>
+        str(map[key]) ? str(map[key]) : whole,
+      )
+    }
+
+    function templateVariableDefaults(template) {
+      const values = {}
+      const list = Array.isArray(template?.variables) ? template.variables : []
+      for (const variable of list) values[variable.key] = variable.default
+      return values
+    }
+
     function jobProgressText(job) {
       if (!isObj(job)) return '生成中…'
       const status = str(job.status) || 'running'
@@ -2233,8 +2338,13 @@ window.__ModuleLoader__.load({
         activeTab,
         onSelectTab,
         workflowCount,
+        templates,
+        activeTemplateId,
+        onSelectTemplate,
+        onNewTemplate,
       } = props
       const [menu, setMenu] = useState(null)
+      const [templateSearch, setTemplateSearch] = useState('')
 
       useEffect(() => {
         if (!menu) return undefined
@@ -2506,6 +2616,74 @@ window.__ModuleLoader__.load({
                 }),
               ),
         ),
+        activeTab === 'templates'
+          ? h(
+              'div',
+              { className: 'iw-template-side' },
+              h(
+                'div',
+                { className: 'iw-side-section' },
+                h('div', { className: 'iw-side-section-title' }, '提示词模板'),
+                h(IconButton, {
+                  name: 'plus',
+                  title: '新建模板',
+                  onClick: onNewTemplate,
+                }),
+              ),
+              h('input', {
+                className: 'iw-input iw-template-search',
+                value: templateSearch,
+                placeholder: '搜索模板名称 / 内容…',
+                onChange: (event) => setTemplateSearch(event.target.value),
+              }),
+              (Array.isArray(templates) ? templates : []).length
+                ? h(
+                    'div',
+                    { className: 'iw-template-list' },
+                    (Array.isArray(templates) ? templates : [])
+                      .filter((template) => {
+                        const query = str(templateSearch).toLowerCase()
+                        if (!query) return true
+                        return (
+                          (str(template.name) + ' ' + str(template.category) + ' ' + str(template.content))
+                            .toLowerCase()
+                            .indexOf(query) >= 0
+                        )
+                      })
+                      .map((template) =>
+                        h(
+                          'button',
+                          {
+                            key: template.id,
+                            type: 'button',
+                            className: cx(
+                              'iw-template-item',
+                              activeTemplateId === template.id && 'active',
+                            ),
+                            onClick: () => onSelectTemplate(template.id),
+                          },
+                          h('span', { className: 'iw-template-name' }, str(template.name)),
+                          h(
+                            'span',
+                            { className: 'iw-template-meta' },
+                            str(template.category) +
+                              ' · 用过 ' +
+                              (template.usageCount || 0) +
+                              ' 次' +
+                              (template.variables && template.variables.length
+                                ? ' · ' + template.variables.length + ' 个变量'
+                                : ''),
+                          ),
+                        ),
+                      ),
+                  )
+                : h(
+                    'div',
+                    { className: 'iw-side-empty' },
+                    '还没有模板。点上方 + 新建，或在输入框点「存为模板」。',
+                  ),
+            )
+          : null,
         activeTab !== 'workspace'
           ? h(
               'div',
@@ -2529,15 +2707,6 @@ window.__ModuleLoader__.load({
                     h('div', { className: 'iw-side-tabinfo-title' }, '资产库'),
                     h('div', { className: 'iw-side-tabinfo-desc' }, '跨会话浏览、收藏和复用生成结果。'),
                     h('div', { className: 'iw-side-tabinfo-badge' }, 'v2.4 上线'),
-                  )
-                : null,
-              activeTab === 'templates'
-                ? h(
-                    'div',
-                    null,
-                    h('div', { className: 'iw-side-tabinfo-title' }, '提示词模板'),
-                    h('div', { className: 'iw-side-tabinfo-desc' }, '保存常用提示词，用 @ 在输入框快速调用。'),
-                    h('div', { className: 'iw-side-tabinfo-badge' }, 'v2.2 上线'),
                   )
                 : null,
             )
@@ -3086,8 +3255,9 @@ window.__ModuleLoader__.load({
                 h(Spinner, { size: 18 }),
                 h('span', null, '正在加载会话…'),
               )
-            : home ||
-              h(EmptyState, {
+            : home
+              ? h('div', { className: 'iw-canvas-home' }, home)
+              : h(EmptyState, {
                 icon: 'message',
                 title: '这个工作区还没有打开的会话',
                 desc: '新建一个会话，或从左侧选择一个已有会话。',
@@ -3096,9 +3266,9 @@ window.__ModuleLoader__.load({
               }),
         )
       } else if (turns.length === 0) {
-        content =
-          home ||
-          h(
+        content = home
+          ? h('div', { className: 'iw-canvas-home' }, home)
+          : h(
             'div',
             { className: 'iw-canvas-hint' },
             h(Icon, { name: 'spark', size: 18 }),
@@ -3714,6 +3884,9 @@ window.__ModuleLoader__.load({
         onParamsChange,
         prompt,
         onPromptChange,
+        templates,
+        onUseTemplate,
+        onSaveAsTemplate,
         refs,
         onRemoveRef,
         onAddFiles,
@@ -3734,6 +3907,36 @@ window.__ModuleLoader__.load({
       const fileInputRef = useRef(null)
       // v1.3: refs for the one-time composer layout self-check (no screenshots).
       const composerRef = useRef(null)
+      // v2.2: `@` template picker state.
+      const templateList = Array.isArray(props.templates) ? props.templates : []
+      const [atMenu, setAtMenu] = useState({ open: false, query: '', at: -1 })
+      const [atIndex, setAtIndex] = useState(0)
+      const [varTemplate, setVarTemplate] = useState(null)
+      const [varValues, setVarValues] = useState({})
+      const filteredTemplates = atMenu.open
+        ? templateList.filter((template) => {
+            const query = str(atMenu.query).toLowerCase()
+            if (!query) return true
+            const haystack =
+              (str(template.name) + ' ' + str(template.category) + ' ' + str(template.content)).toLowerCase()
+            return haystack.indexOf(query) >= 0
+          })
+        : []
+      // v2.2: close the @ picker when clicking outside the composer.
+      useEffect(() => {
+        if (!atMenu.open) return undefined
+        const onDocumentDown = (event) => {
+          const root = composerRef.current
+          if (root && event.target && typeof root.contains === 'function' && root.contains(event.target)) {
+            return
+          }
+          setAtMenu({ open: false, query: '', at: -1 })
+          setVarTemplate(null)
+          setVarValues({})
+        }
+        document.addEventListener('mousedown', onDocumentDown)
+        return () => document.removeEventListener('mousedown', onDocumentDown)
+      }, [atMenu.open])
       const rowRef = useRef(null)
       const sendButtonRef = useRef(null)
 
@@ -4078,7 +4281,182 @@ window.__ModuleLoader__.load({
         )
       }
 
+      const closeAtMenu = () => {
+        setAtMenu({ open: false, query: '', at: -1 })
+        setVarTemplate(null)
+        setVarValues({})
+        setAtIndex(0)
+      }
+
+      const insertTemplate = (template, values) => {
+        if (!template) return
+        const rendered = renderTemplate(template.content, values)
+        const current = str(prompt)
+        const at = atMenu.at >= 0 ? atMenu.at : current.length
+        const next = current.slice(0, at) + rendered
+        onPromptChange(next)
+        if (typeof onUseTemplate === 'function') onUseTemplate(template.id)
+        closeAtMenu()
+        setTimeout(() => {
+          const element = textareaRef.current
+          if (element && typeof element.focus === 'function') {
+            element.focus()
+            if (typeof element.setSelectionRange === 'function') {
+              const position = next.length
+              try {
+                element.setSelectionRange(position, position)
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }, 30)
+      }
+
+      const pickTemplate = (template) => {
+        if (!template) return
+        if (Array.isArray(template.variables) && template.variables.length) {
+          setVarTemplate(template)
+          setVarValues(templateVariableDefaults(template))
+          return
+        }
+        insertTemplate(template, null)
+      }
+
+      const handlePromptInput = (value) => {
+        onPromptChange(value)
+        const text = str(value)
+        const at = text.lastIndexOf('@')
+        const valid = at >= 0 && (at === 0 || /\s/.test(text[at - 1]))
+        const query = valid ? text.slice(at + 1) : ''
+        if (valid && query.length <= 30 && query.indexOf('\n') < 0) {
+          setAtMenu({ open: true, query, at })
+          setAtIndex(0)
+        } else if (atMenu.open) {
+          setAtMenu({ open: false, query: '', at: -1 })
+          setVarTemplate(null)
+        }
+      }
+
+      const renderAtMenu = () => {
+        if (varTemplate) {
+          const keys = Array.isArray(varTemplate.variables) ? varTemplate.variables : []
+          return h(
+            'div',
+            { className: 'iw-at-menu' },
+            h('div', { className: 'iw-at-head' }, `填写「${str(varTemplate.name)}」的变量`),
+            keys.map((variable) =>
+              h(
+                'label',
+                { key: variable.key, className: 'iw-at-var-row' },
+                h('span', { className: 'iw-at-var-key' }, str(variable.label) || variable.key),
+                h('input', {
+                  className: 'iw-input iw-at-var-input',
+                  value: str(varValues[variable.key]),
+                  placeholder: str(variable.default) || '默认值',
+                  onChange: (event) =>
+                    setVarValues((previous) => ({ ...previous, [variable.key]: event.target.value })),
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      insertTemplate(varTemplate, varValues)
+                    }
+                  },
+                }),
+              ),
+            ),
+            h(
+              'div',
+              { className: 'iw-at-actions' },
+              h('button', { type: 'button', className: 'iw-btn', onClick: closeAtMenu }, '取消'),
+              h(
+                'button',
+                { type: 'button', className: 'iw-btn iw-btn-primary', onClick: () => insertTemplate(varTemplate, varValues) },
+                '插入',
+              ),
+            ),
+          )
+        }
+        const list = filteredTemplates.slice(0, 8)
+        return h(
+          'div',
+          { className: 'iw-at-menu' },
+          h(
+            'div',
+            { className: 'iw-at-head' },
+            h(Icon, { name: 'spark', size: 12 }),
+            atMenu.query ? `模板：${atMenu.query}` : '插入提示词模板',
+          ),
+          list.length
+            ? list.map((template, index) =>
+                h(
+                  'button',
+                  {
+                    key: template.id,
+                    type: 'button',
+                    className: cx('iw-at-item', index === atIndex && 'active'),
+                    onMouseEnter: () => setAtIndex(index),
+                    onClick: () => pickTemplate(template),
+                  },
+                  h('span', { className: 'iw-at-name' }, str(template.name)),
+                  h('span', { className: 'iw-at-cat' }, str(template.category)),
+                  template.variables.length
+                    ? h('span', { className: 'iw-at-vars' }, `${template.variables.length} 个变量`)
+                    : null,
+                ),
+              )
+            : h(
+                'div',
+                { className: 'iw-at-empty' },
+                templateList.length ? '没有匹配的模板' : '还没有模板，去「模板」标签新建一个',
+              ),
+          h(
+            'div',
+            { className: 'iw-at-foot' },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'iw-at-save',
+                onClick: () => {
+                  const text = str(prompt).trim()
+                  closeAtMenu()
+                  if (!text) {
+                    if (onToast) onToast('info', '先输入提示词再存为模板')
+                    return
+                  }
+                  if (typeof onSaveAsTemplate === 'function') onSaveAsTemplate(text)
+                },
+              },
+              '＋ 把当前输入存为模板',
+            ),
+          ),
+        )
+      }
+
       const handleKeyDown = (event) => {
+        if (atMenu.open && !varTemplate) {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            closeAtMenu()
+            return
+          }
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault()
+            const total = Math.max(1, filteredTemplates.length)
+            setAtIndex((index) =>
+              event.key === 'ArrowDown' ? (index + 1) % total : (index - 1 + total) % total,
+            )
+            return
+          }
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            const template = filteredTemplates[atIndex]
+            if (template) pickTemplate(template)
+            return
+          }
+        }
+
         if (event.key !== 'Enter') return
         if (event.shiftKey) return
         if (event.nativeEvent && event.nativeEvent.isComposing) return
@@ -4130,6 +4508,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: cx('iw-composer', focused && 'focused'), ref: composerRef },
+            atMenu.open ? renderAtMenu() : null,
             refList.length
               ? h(
                   'div',
@@ -4164,8 +4543,8 @@ window.__ModuleLoader__.load({
               value: prompt,
               placeholder: comfy
               ? '描述你想生成的画面（ComfyUI 工作流模式：文字写入绑定的提示词节点）'
-              : '描述你想生成的画面，/ 调用指令，@ 添加参考图',
-              onChange: (event) => onPromptChange(event.target.value),
+              : '描述你想生成的画面，/ 调用指令，@ 插入提示词模板',
+              onChange: (event) => handlePromptInput(event.target.value),
               onKeyDown: handleKeyDown,
               onPaste: handlePaste,
               onFocus: () => setFocused(true),
@@ -4216,6 +4595,24 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { className: 'iw-composer-controls' },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-composer-link',
+                    title: '把当前输入保存为提示词模板',
+                    onClick: () => {
+                      const text = str(prompt).trim()
+                      if (!text) {
+                        if (onToast) onToast('info', '先输入提示词再存为模板')
+                        return
+                      }
+                      if (typeof onSaveAsTemplate === 'function') onSaveAsTemplate(text)
+                    },
+                  },
+                  h(Icon, { name: 'spark', size: 11 }),
+                  '存为模板',
+                ),
                 modelList.length === 0 && workflowList.length === 0
                   ? h(
                       'button',
@@ -7894,7 +8291,7 @@ window.__ModuleLoader__.load({
                           'button',
                           {
                             type: 'button',
-                            className: 'iw-btn danger',
+                            className: 'iw-btn iw-btn-danger',
                             onClick: () => props.onDelete(workflow),
                           },
                           '删除',
@@ -7916,6 +8313,226 @@ window.__ModuleLoader__.load({
         h('div', { className: 'iw-main-empty-title' }, props.title),
         h('div', { className: 'iw-main-empty-desc' }, props.desc),
         props.badge ? h('div', { className: 'iw-side-tabinfo-badge' }, props.badge) : null,
+      )
+    }
+
+    /**
+     * v2.2: template editor. Detects `{{变量}}` in the content automatically,
+     * lets the user set defaults, shows a rendered preview and can insert the
+     * result straight into the composer.
+     */
+    function TemplateBoard(props) {
+      const selected = isObj(props.template) ? props.template : null
+      const draftKey = selected ? str(selected.id) || 'new-template' : 'no-template'
+      const [name, setName] = useState(() => (selected ? str(selected.name) : ''))
+      const [category, setCategory] = useState(() => (selected ? str(selected.category) : '通用'))
+      const [content, setContent] = useState(() => (selected ? str(selected.content) : ''))
+      const [bindCategory, setBindCategory] = useState(() =>
+        selected ? str(selected.bindWorkflowCategory) : '',
+      )
+      const [varDrafts, setVarDrafts] = useState({})
+      const [busy, setBusy] = useState(false)
+      const [error, setError] = useState('')
+      const loadedKeyRef = useRef('')
+      useEffect(() => {
+        if (loadedKeyRef.current === draftKey) return
+        loadedKeyRef.current = draftKey
+        setName(selected ? str(selected.name) : '')
+        setCategory(selected ? str(selected.category) : '通用')
+        setContent(selected ? str(selected.content) : '')
+        setBindCategory(selected ? str(selected.bindWorkflowCategory) : '')
+        setVarDrafts({})
+        setError('')
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [draftKey])
+
+      const keys = templateVariableKeys(content)
+      const variables = keys.map((key) => {
+        const draft = isObj(varDrafts[key]) ? varDrafts[key] : {}
+        return { key, label: str(draft.label) || key, default: str(draft.default) }
+      })
+      const values = {}
+      for (const variable of variables) values[variable.key] = variable.default
+      const rendered = renderTemplate(content, values)
+
+      const save = async () => {
+        const cleanName = str(name).trim()
+        if (!cleanName) {
+          setError('请填写模板名称')
+          return
+        }
+        if (!str(content).trim()) {
+          setError('模板内容不能为空')
+          return
+        }
+        setBusy(true)
+        setError('')
+        try {
+          await props.onSave({
+            id: selected && selected.id ? selected.id : '',
+            name: cleanName,
+            category: str(category).trim() || '通用',
+            content: str(content),
+            variables,
+            bindWorkflowCategory: bindCategory,
+            tags: [],
+          })
+        } catch (failure) {
+          setError((failure && failure.message) || String(failure))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      const bindOptions = [
+        { value: '', label: '不绑定' },
+        ...WORKFLOW_CATEGORY_ORDER.map((id) => ({
+          value: id,
+          label: WORKFLOW_CATEGORY_LABELS[id] || id,
+        })),
+      ]
+
+      return h(
+        'div',
+        { className: 'iw-template-board' },
+        h(
+          'div',
+          { className: 'iw-board-head' },
+          h(
+            'div',
+            { className: 'iw-board-title' },
+            selected && selected.id ? '编辑模板' : '新建模板',
+          ),
+          h(
+            'div',
+            { className: 'iw-board-sub' },
+            '用 {{变量}} 占位，插入输入框时填写；输入框里打 @ 可快速调用。',
+          ),
+        ),
+        h(
+          'div',
+          { className: 'iw-template-form' },
+          h(
+            Field,
+            { label: '模板名称' },
+            h('input', {
+              className: 'iw-input',
+              value: name,
+              placeholder: '例如：复古胶片人像',
+              onChange: (event) => setName(event.target.value),
+            }),
+          ),
+          h(
+            Field,
+            { label: '分类' },
+            h('input', {
+              className: 'iw-input',
+              value: category,
+              placeholder: '通用 / 人像 / 产品 / 海报 / 风格…',
+              onChange: (event) => setCategory(event.target.value),
+            }),
+          ),
+          h(
+            Field,
+            { label: '绑定工作流分类（可选）' },
+            h(Select, {
+              className: 'iw-param-select',
+              value: bindCategory,
+              options: bindOptions,
+              onChange: (value) => setBindCategory(value),
+            }),
+          ),
+          h(
+            Field,
+            { label: '模板内容' },
+            h('textarea', {
+              className: 'iw-input iw-template-content',
+              rows: 7,
+              value: content,
+              placeholder: '{{主体}}，{{风格}}，35mm 胶片，浅景深，柔和自然光…',
+              onChange: (event) => setContent(event.target.value),
+            }),
+          ),
+          keys.length
+            ? h(
+                Field,
+                { label: '变量默认值' },
+                h(
+                  'div',
+                  { className: 'iw-template-vars' },
+                  variables.map((variable) =>
+                    h(
+                      'label',
+                      { key: variable.key, className: 'iw-template-var' },
+                      h('span', { className: 'iw-template-var-key' }, variable.key),
+                      h('input', {
+                        className: 'iw-input',
+                        value: variable.default,
+                        placeholder: '默认值（可留空）',
+                        onChange: (event) =>
+                          setVarDrafts((previous) => ({
+                            ...previous,
+                            [variable.key]: {
+                              ...previous[variable.key],
+                              default: event.target.value,
+                            },
+                          })),
+                      }),
+                    ),
+                  ),
+                ),
+              )
+            : null,
+          h(
+            'div',
+            { className: 'iw-template-preview' },
+            h('div', { className: 'iw-template-preview-label' }, '预览'),
+            h(
+              'div',
+              { className: 'iw-template-preview-body' },
+              rendered ? rendered : '（还没有内容）',
+            ),
+          ),
+          error ? h('div', { className: 'iw-form-error' }, error) : null,
+          h(
+            'div',
+            { className: 'iw-template-actions' },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'iw-btn iw-btn-primary',
+                disabled: busy,
+                onClick: () => void save(),
+              },
+              busy ? '保存中…' : selected && selected.id ? '保存修改' : '保存模板',
+            ),
+            str(content).trim()
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn',
+                    disabled: busy,
+                    onClick: () => props.onInsert(rendered),
+                  },
+                  '插入输入框',
+                )
+              : null,
+            selected && selected.id
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn iw-btn-danger',
+                    disabled: busy,
+                    onClick: () => props.onDelete(selected.id),
+                  },
+                  '删除',
+                )
+              : null,
+          ),
+        ),
       )
     }
 
@@ -7945,6 +8562,10 @@ window.__ModuleLoader__.load({
       // v1.2: local ComfyUI workflow list (model dropdown + dynamic params).
       const [workflows, setWorkflows] = useState([])
       const [workflowsLoaded, setWorkflowsLoaded] = useState(false)
+      // v2.2: prompt templates (模板 tab + composer @ picker).
+      const [templates, setTemplates] = useState([])
+      const [templatesLoaded, setTemplatesLoaded] = useState(false)
+      const [templateEdit, setTemplateEdit] = useState(null)
       // v2.1: sidebar activity tab; the main area follows it.
       const [activeTab, setActiveTab] = useState(() => {
         const storedTab = str(storedUiRef.current.activeTab)
@@ -8106,6 +8727,18 @@ window.__ModuleLoader__.load({
         }
       }
 
+      async function loadTemplates() {
+        try {
+          const data = await rpc('template.list')
+          if (!mountedRef.current) return
+          setTemplates(normalizeTemplateList(data))
+        } catch (error) {
+          reportLog('warn', `template.list failed: ${(error && error.message) || error}`)
+        } finally {
+          if (mountedRef.current) setTemplatesLoaded(true)
+        }
+      }
+
       function syncParamsWithSettings(nextSettings, nextLimits) {
         setParams((previous) => {
           const next = { ...previous }
@@ -8224,6 +8857,7 @@ window.__ModuleLoader__.load({
         })
         // v1.2: keep the local ComfyUI workflow list in sync with bootstrap.
         loadWorkflows()
+        loadTemplates()
         return { wsId, convId, workspaces: nextWorkspaces, settings: nextSettings }
       }
 
@@ -9013,6 +9647,89 @@ window.__ModuleLoader__.load({
         }
       }
 
+      /** v2.2: template tab + composer integration. */
+      function handleSelectTemplate(id) {
+        const found = (templates || []).find((template) => template.id === id) || null
+        setTemplateEdit(found)
+        setActiveTab('templates')
+      }
+
+      function handleNewTemplate() {
+        setTemplateEdit({
+          id: '',
+          name: '',
+          category: '通用',
+          content: '',
+          variables: [],
+          bindWorkflowCategory: '',
+          bindWorkflowId: '',
+          tags: [],
+          usageCount: 0,
+        })
+        setActiveTab('templates')
+      }
+
+      async function handleSaveTemplate(payload) {
+        const data = await rpc('template.save', payload)
+        const saved = data && data.template ? data.template : null
+        if (saved) setTemplateEdit(normalizeTemplate(saved))
+        await loadTemplates()
+        pushToast('success', payload && payload.id ? '模板已保存' : '模板已创建')
+        return saved
+      }
+
+      async function handleDeleteTemplate(id) {
+        const target = (templates || []).find((template) => template.id === id)
+        let confirmed = true
+        try {
+          confirmed =
+            typeof window.confirm === 'function'
+              ? window.confirm(
+                  `确定删除模板「${str(target && target.name) || '未命名模板'}」？`,
+                )
+              : true
+        } catch (error) {
+          confirmed = true
+        }
+        if (!confirmed) return
+        try {
+          await rpc('template.delete', { id })
+          setTemplateEdit(null)
+          await loadTemplates()
+          pushToast('success', '模板已删除')
+        } catch (error) {
+          pushToast('error', `删除失败：${(error && error.message) || error}`)
+        }
+      }
+
+      function handleInsertTemplate(text) {
+        setActiveTab('workspace')
+        setPrompt(str(text))
+        setTimeout(() => {
+          const textarea = textareaRef.current
+          if (textarea && typeof textarea.focus === 'function') textarea.focus()
+        }, 60)
+      }
+
+      function handleUseTemplate(id) {
+        void rpc('template.touch', { id }).catch(() => {})
+      }
+
+      function handleSaveAsTemplate(text) {
+        setTemplateEdit({
+          id: '',
+          name: '',
+          category: '通用',
+          content: str(text),
+          variables: [],
+          bindWorkflowCategory: '',
+          bindWorkflowId: '',
+          tags: [],
+          usageCount: 0,
+        })
+        setActiveTab('templates')
+      }
+
       /** v2.1: switch the composer to a ComfyUI workflow and focus the input. */
       async function applyComfyWorkflowId(workflowId) {
         const id = str(workflowId)
@@ -9724,6 +10441,9 @@ window.__ModuleLoader__.load({
                     textareaRef,
                     onToast: pushToast,
                     onClearRefs: () => setRefs([]),
+                    templates,
+                    onUseTemplate: handleUseTemplate,
+                    onSaveAsTemplate: handleSaveAsTemplate,
                   }),
                   ),
                   activeTab === 'workflows'
@@ -9744,11 +10464,11 @@ window.__ModuleLoader__.load({
                       })
                     : null,
                   activeTab === 'templates'
-                    ? h(ComingSoon, {
-                        icon: 'spark',
-                        title: '提示词模板',
-                        desc: '保存常用提示词，用 @ 在输入框快速调用。',
-                        badge: 'v2.2 上线',
+                    ? h(TemplateBoard, {
+                        template: templateEdit,
+                        onSave: handleSaveTemplate,
+                        onDelete: handleDeleteTemplate,
+                        onInsert: handleInsertTemplate,
                       })
                     : null,
                 ),

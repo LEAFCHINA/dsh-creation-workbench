@@ -33,8 +33,13 @@
         activeTab,
         onSelectTab,
         workflowCount,
+        templates,
+        activeTemplateId,
+        onSelectTemplate,
+        onNewTemplate,
       } = props
       const [menu, setMenu] = useState(null)
+      const [templateSearch, setTemplateSearch] = useState('')
 
       useEffect(() => {
         if (!menu) return undefined
@@ -306,6 +311,74 @@
                 }),
               ),
         ),
+        activeTab === 'templates'
+          ? h(
+              'div',
+              { className: 'iw-template-side' },
+              h(
+                'div',
+                { className: 'iw-side-section' },
+                h('div', { className: 'iw-side-section-title' }, '提示词模板'),
+                h(IconButton, {
+                  name: 'plus',
+                  title: '新建模板',
+                  onClick: onNewTemplate,
+                }),
+              ),
+              h('input', {
+                className: 'iw-input iw-template-search',
+                value: templateSearch,
+                placeholder: '搜索模板名称 / 内容…',
+                onChange: (event) => setTemplateSearch(event.target.value),
+              }),
+              (Array.isArray(templates) ? templates : []).length
+                ? h(
+                    'div',
+                    { className: 'iw-template-list' },
+                    (Array.isArray(templates) ? templates : [])
+                      .filter((template) => {
+                        const query = str(templateSearch).toLowerCase()
+                        if (!query) return true
+                        return (
+                          (str(template.name) + ' ' + str(template.category) + ' ' + str(template.content))
+                            .toLowerCase()
+                            .indexOf(query) >= 0
+                        )
+                      })
+                      .map((template) =>
+                        h(
+                          'button',
+                          {
+                            key: template.id,
+                            type: 'button',
+                            className: cx(
+                              'iw-template-item',
+                              activeTemplateId === template.id && 'active',
+                            ),
+                            onClick: () => onSelectTemplate(template.id),
+                          },
+                          h('span', { className: 'iw-template-name' }, str(template.name)),
+                          h(
+                            'span',
+                            { className: 'iw-template-meta' },
+                            str(template.category) +
+                              ' · 用过 ' +
+                              (template.usageCount || 0) +
+                              ' 次' +
+                              (template.variables && template.variables.length
+                                ? ' · ' + template.variables.length + ' 个变量'
+                                : ''),
+                          ),
+                        ),
+                      ),
+                  )
+                : h(
+                    'div',
+                    { className: 'iw-side-empty' },
+                    '还没有模板。点上方 + 新建，或在输入框点「存为模板」。',
+                  ),
+            )
+          : null,
         activeTab !== 'workspace'
           ? h(
               'div',
@@ -329,15 +402,6 @@
                     h('div', { className: 'iw-side-tabinfo-title' }, '资产库'),
                     h('div', { className: 'iw-side-tabinfo-desc' }, '跨会话浏览、收藏和复用生成结果。'),
                     h('div', { className: 'iw-side-tabinfo-badge' }, 'v2.4 上线'),
-                  )
-                : null,
-              activeTab === 'templates'
-                ? h(
-                    'div',
-                    null,
-                    h('div', { className: 'iw-side-tabinfo-title' }, '提示词模板'),
-                    h('div', { className: 'iw-side-tabinfo-desc' }, '保存常用提示词，用 @ 在输入框快速调用。'),
-                    h('div', { className: 'iw-side-tabinfo-badge' }, 'v2.2 上线'),
                   )
                 : null,
             )

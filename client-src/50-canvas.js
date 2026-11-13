@@ -506,8 +506,9 @@
                 h(Spinner, { size: 18 }),
                 h('span', null, '正在加载会话…'),
               )
-            : home ||
-              h(EmptyState, {
+            : home
+              ? h('div', { className: 'iw-canvas-home' }, home)
+              : h(EmptyState, {
                 icon: 'message',
                 title: '这个工作区还没有打开的会话',
                 desc: '新建一个会话，或从左侧选择一个已有会话。',
@@ -516,9 +517,9 @@
               }),
         )
       } else if (turns.length === 0) {
-        content =
-          home ||
-          h(
+        content = home
+          ? h('div', { className: 'iw-canvas-home' }, home)
+          : h(
             'div',
             { className: 'iw-canvas-hint' },
             h(Icon, { name: 'spark', size: 18 }),

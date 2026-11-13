@@ -848,6 +848,70 @@
       return images.length >= 2
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Prompt templates (v2.2)                                             */
+    /* ------------------------------------------------------------------ */
+
+    const TEMPLATE_VAR_RE = /\{\{([^{}]{1,40})\}\}/g
+
+    function normalizeTemplate(raw) {
+      const source = isObj(raw) ? raw : {}
+      const content = str(source.content)
+      return {
+        id: str(source.id),
+        name: str(source.name) || '未命名模板',
+        category: str(source.category) || '通用',
+        content,
+        variables: Array.isArray(source.variables)
+          ? source.variables
+              .filter((item) => isObj(item) && str(item.key))
+              .map((item) => ({
+                key: str(item.key),
+                label: str(item.label) || str(item.key),
+                default: str(item.default),
+              }))
+          : [],
+        bindWorkflowCategory: str(source.bindWorkflowCategory),
+        bindWorkflowId: str(source.bindWorkflowId),
+        tags: Array.isArray(source.tags) ? source.tags.filter((tag) => str(tag)) : [],
+        usageCount: num(source.usageCount, 0),
+        createdAt: str(source.createdAt),
+        updatedAt: str(source.updatedAt),
+      }
+    }
+
+    function normalizeTemplateList(raw) {
+      const list = Array.isArray(raw) ? raw : isObj(raw) && Array.isArray(raw.templates) ? raw.templates : []
+      return list.map(normalizeTemplate).filter((template) => template.id)
+    }
+
+    /** Variable keys used by the content, in first-appearance order. */
+    function templateVariableKeys(content) {
+      const keys = []
+      const text = str(content)
+      TEMPLATE_VAR_RE.lastIndex = 0
+      let match = TEMPLATE_VAR_RE.exec(text)
+      while (match) {
+        if (keys.indexOf(match[1]) < 0) keys.push(match[1])
+        match = TEMPLATE_VAR_RE.exec(text)
+      }
+      return keys
+    }
+
+    function renderTemplate(content, values) {
+      const map = isObj(values) ? values : {}
+      return str(content).replace(TEMPLATE_VAR_RE, (whole, key) =>
+        str(map[key]) ? str(map[key]) : whole,
+      )
+    }
+
+    function templateVariableDefaults(template) {
+      const values = {}
+      const list = Array.isArray(template?.variables) ? template.variables : []
+      for (const variable of list) values[variable.key] = variable.default
+      return values
+    }
+
     function jobProgressText(job) {
       if (!isObj(job)) return '生成中…'
       const status = str(job.status) || 'running'

@@ -2,6 +2,23 @@
 
 First public release: **1.2.2**.
 
+## 2.2.0 — prompt templates
+
+- **New 模板 tab**: create / edit / delete reusable prompt templates with a
+  category, optional workflow-category binding, automatic `{{变量}}` detection
+  (with per-variable defaults) and a live preview. Templates are stored in
+  `<DATA_DIR>/templates.json`.
+- **`@` picker in the composer**: typing `@` opens a searchable template menu
+  (↑↓/Enter/Esc). Templates with variables open a small fill-in form before the
+  rendered text is inserted; usage counts are tracked. `@` replaces the old
+  reference-image hint; reference images are still added via the + button / paste.
+- **存为模板**: save the current composer text as a template in one click (also
+  available from the @ menu).
+- **Home centering fix** — the workspace greeting/intent picker now renders
+  centered at full width.
+- 资产库 tab remains a placeholder (v2.4).
+
+
 ## 2.1.0 — activity tabs, workspace home, workflow categories
 
 - **Activity tabs**: the sidebar now has 工作区 / 资产库 / 模板 / 工作流 tabs, and

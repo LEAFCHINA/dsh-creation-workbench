@@ -348,6 +348,44 @@ try {
   mockState.neverComplete = false
   await h.op('settings.set', { jobTimeoutMs: 300000 })
 
+  section('4f. 提示词模板 CRUD')
+  const tplCreated = await h.op('template.save', {
+    name: '胶片人像',
+    category: '人像',
+    content: '{{主体}}，{{风格}}，35mm 胶片，浅景深',
+    variables: [
+      { key: '主体', label: '主体', default: '少女' },
+      { key: '风格', label: '风格', default: '复古' },
+    ],
+    bindWorkflowCategory: 'image',
+  })
+  const tplId = tplCreated?.template?.id
+  ok('template.save 返回 id', typeof tplId === 'string' && tplId.startsWith('tpl_'), JSON.stringify(tplCreated))
+  const tplList = await h.op('template.list')
+  const tplItem = (tplList?.templates || []).find((item) => item.id === tplId)
+  ok('template.list 含模板与变量', !!tplItem && tplItem.variables.length === 2, JSON.stringify(tplItem))
+  ok('模板绑定工作流分类保留', tplItem?.bindWorkflowCategory === 'image', JSON.stringify(tplItem?.bindWorkflowCategory))
+  const tplTouched = await h.op('template.touch', { id: tplId })
+  ok('template.touch 累加使用次数', tplTouched?.usageCount === 1, JSON.stringify(tplTouched))
+  const tplUpdated = await h.op('template.save', {
+    id: tplId,
+    name: '胶片人像 2',
+    category: '人像',
+    content: '{{主体}}，电影感',
+    variables: [{ key: '主体', label: '主体', default: '少年' }],
+  })
+  ok('template.save 更新生效', tplUpdated?.template?.name === '胶片人像 2', JSON.stringify(tplUpdated?.template?.name))
+  let tplRejected = false
+  try {
+    await h.op('template.save', { name: '空内容', content: '   ' })
+  } catch (err) {
+    tplRejected = err.status === 400 || err.code === 'INVALID_REQUEST'
+  }
+  ok('空模板内容被拒绝', tplRejected)
+  await h.op('template.delete', { id: tplId })
+  const tplAfterDelete = await h.op('template.list')
+  ok('模板删除生效', !(tplAfterDelete?.templates || []).some((item) => item.id === tplId))
+
   section('5. 错误路径')
   mockState.failSystemStats = true
   const bad = await h.op('comfy.status')

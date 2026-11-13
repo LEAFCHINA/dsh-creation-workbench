@@ -12,6 +12,9 @@
         onParamsChange,
         prompt,
         onPromptChange,
+        templates,
+        onUseTemplate,
+        onSaveAsTemplate,
         refs,
         onRemoveRef,
         onAddFiles,
@@ -32,6 +35,36 @@
       const fileInputRef = useRef(null)
       // v1.3: refs for the one-time composer layout self-check (no screenshots).
       const composerRef = useRef(null)
+      // v2.2: `@` template picker state.
+      const templateList = Array.isArray(props.templates) ? props.templates : []
+      const [atMenu, setAtMenu] = useState({ open: false, query: '', at: -1 })
+      const [atIndex, setAtIndex] = useState(0)
+      const [varTemplate, setVarTemplate] = useState(null)
+      const [varValues, setVarValues] = useState({})
+      const filteredTemplates = atMenu.open
+        ? templateList.filter((template) => {
+            const query = str(atMenu.query).toLowerCase()
+            if (!query) return true
+            const haystack =
+              (str(template.name) + ' ' + str(template.category) + ' ' + str(template.content)).toLowerCase()
+            return haystack.indexOf(query) >= 0
+          })
+        : []
+      // v2.2: close the @ picker when clicking outside the composer.
+      useEffect(() => {
+        if (!atMenu.open) return undefined
+        const onDocumentDown = (event) => {
+          const root = composerRef.current
+          if (root && event.target && typeof root.contains === 'function' && root.contains(event.target)) {
+            return
+          }
+          setAtMenu({ open: false, query: '', at: -1 })
+          setVarTemplate(null)
+          setVarValues({})
+        }
+        document.addEventListener('mousedown', onDocumentDown)
+        return () => document.removeEventListener('mousedown', onDocumentDown)
+      }, [atMenu.open])
       const rowRef = useRef(null)
       const sendButtonRef = useRef(null)
 
@@ -376,7 +409,182 @@
         )
       }
 
+      const closeAtMenu = () => {
+        setAtMenu({ open: false, query: '', at: -1 })
+        setVarTemplate(null)
+        setVarValues({})
+        setAtIndex(0)
+      }
+
+      const insertTemplate = (template, values) => {
+        if (!template) return
+        const rendered = renderTemplate(template.content, values)
+        const current = str(prompt)
+        const at = atMenu.at >= 0 ? atMenu.at : current.length
+        const next = current.slice(0, at) + rendered
+        onPromptChange(next)
+        if (typeof onUseTemplate === 'function') onUseTemplate(template.id)
+        closeAtMenu()
+        setTimeout(() => {
+          const element = textareaRef.current
+          if (element && typeof element.focus === 'function') {
+            element.focus()
+            if (typeof element.setSelectionRange === 'function') {
+              const position = next.length
+              try {
+                element.setSelectionRange(position, position)
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }, 30)
+      }
+
+      const pickTemplate = (template) => {
+        if (!template) return
+        if (Array.isArray(template.variables) && template.variables.length) {
+          setVarTemplate(template)
+          setVarValues(templateVariableDefaults(template))
+          return
+        }
+        insertTemplate(template, null)
+      }
+
+      const handlePromptInput = (value) => {
+        onPromptChange(value)
+        const text = str(value)
+        const at = text.lastIndexOf('@')
+        const valid = at >= 0 && (at === 0 || /\s/.test(text[at - 1]))
+        const query = valid ? text.slice(at + 1) : ''
+        if (valid && query.length <= 30 && query.indexOf('\n') < 0) {
+          setAtMenu({ open: true, query, at })
+          setAtIndex(0)
+        } else if (atMenu.open) {
+          setAtMenu({ open: false, query: '', at: -1 })
+          setVarTemplate(null)
+        }
+      }
+
+      const renderAtMenu = () => {
+        if (varTemplate) {
+          const keys = Array.isArray(varTemplate.variables) ? varTemplate.variables : []
+          return h(
+            'div',
+            { className: 'iw-at-menu' },
+            h('div', { className: 'iw-at-head' }, `填写「${str(varTemplate.name)}」的变量`),
+            keys.map((variable) =>
+              h(
+                'label',
+                { key: variable.key, className: 'iw-at-var-row' },
+                h('span', { className: 'iw-at-var-key' }, str(variable.label) || variable.key),
+                h('input', {
+                  className: 'iw-input iw-at-var-input',
+                  value: str(varValues[variable.key]),
+                  placeholder: str(variable.default) || '默认值',
+                  onChange: (event) =>
+                    setVarValues((previous) => ({ ...previous, [variable.key]: event.target.value })),
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      insertTemplate(varTemplate, varValues)
+                    }
+                  },
+                }),
+              ),
+            ),
+            h(
+              'div',
+              { className: 'iw-at-actions' },
+              h('button', { type: 'button', className: 'iw-btn', onClick: closeAtMenu }, '取消'),
+              h(
+                'button',
+                { type: 'button', className: 'iw-btn iw-btn-primary', onClick: () => insertTemplate(varTemplate, varValues) },
+                '插入',
+              ),
+            ),
+          )
+        }
+        const list = filteredTemplates.slice(0, 8)
+        return h(
+          'div',
+          { className: 'iw-at-menu' },
+          h(
+            'div',
+            { className: 'iw-at-head' },
+            h(Icon, { name: 'spark', size: 12 }),
+            atMenu.query ? `模板：${atMenu.query}` : '插入提示词模板',
+          ),
+          list.length
+            ? list.map((template, index) =>
+                h(
+                  'button',
+                  {
+                    key: template.id,
+                    type: 'button',
+                    className: cx('iw-at-item', index === atIndex && 'active'),
+                    onMouseEnter: () => setAtIndex(index),
+                    onClick: () => pickTemplate(template),
+                  },
+                  h('span', { className: 'iw-at-name' }, str(template.name)),
+                  h('span', { className: 'iw-at-cat' }, str(template.category)),
+                  template.variables.length
+                    ? h('span', { className: 'iw-at-vars' }, `${template.variables.length} 个变量`)
+                    : null,
+                ),
+              )
+            : h(
+                'div',
+                { className: 'iw-at-empty' },
+                templateList.length ? '没有匹配的模板' : '还没有模板，去「模板」标签新建一个',
+              ),
+          h(
+            'div',
+            { className: 'iw-at-foot' },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'iw-at-save',
+                onClick: () => {
+                  const text = str(prompt).trim()
+                  closeAtMenu()
+                  if (!text) {
+                    if (onToast) onToast('info', '先输入提示词再存为模板')
+                    return
+                  }
+                  if (typeof onSaveAsTemplate === 'function') onSaveAsTemplate(text)
+                },
+              },
+              '＋ 把当前输入存为模板',
+            ),
+          ),
+        )
+      }
+
       const handleKeyDown = (event) => {
+        if (atMenu.open && !varTemplate) {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            closeAtMenu()
+            return
+          }
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault()
+            const total = Math.max(1, filteredTemplates.length)
+            setAtIndex((index) =>
+              event.key === 'ArrowDown' ? (index + 1) % total : (index - 1 + total) % total,
+            )
+            return
+          }
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            const template = filteredTemplates[atIndex]
+            if (template) pickTemplate(template)
+            return
+          }
+        }
+
         if (event.key !== 'Enter') return
         if (event.shiftKey) return
         if (event.nativeEvent && event.nativeEvent.isComposing) return
@@ -428,6 +636,7 @@
           h(
             'div',
             { className: cx('iw-composer', focused && 'focused'), ref: composerRef },
+            atMenu.open ? renderAtMenu() : null,
             refList.length
               ? h(
                   'div',
@@ -462,8 +671,8 @@
               value: prompt,
               placeholder: comfy
               ? '描述你想生成的画面（ComfyUI 工作流模式：文字写入绑定的提示词节点）'
-              : '描述你想生成的画面，/ 调用指令，@ 添加参考图',
-              onChange: (event) => onPromptChange(event.target.value),
+              : '描述你想生成的画面，/ 调用指令，@ 插入提示词模板',
+              onChange: (event) => handlePromptInput(event.target.value),
               onKeyDown: handleKeyDown,
               onPaste: handlePaste,
               onFocus: () => setFocused(true),
@@ -514,6 +723,24 @@
               h(
                 'div',
                 { className: 'iw-composer-controls' },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-composer-link',
+                    title: '把当前输入保存为提示词模板',
+                    onClick: () => {
+                      const text = str(prompt).trim()
+                      if (!text) {
+                        if (onToast) onToast('info', '先输入提示词再存为模板')
+                        return
+                      }
+                      if (typeof onSaveAsTemplate === 'function') onSaveAsTemplate(text)
+                    },
+                  },
+                  h(Icon, { name: 'spark', size: 11 }),
+                  '存为模板',
+                ),
                 modelList.length === 0 && workflowList.length === 0
                   ? h(
                       'button',
