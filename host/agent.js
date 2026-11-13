@@ -22,6 +22,13 @@ const DEFAULT_SYSTEM_PROMPT =
   '你是资深 AI 视觉创作提示词工程师。根据用户给出的想法或图片，输出一段可直接用于 AI 生图/生视频模型的提示词：' +
   '具体、可执行、包含主体、构图、光线、材质、风格与氛围；不要输出解释、标题或 Markdown。'
 const MAX_IMAGE_BASE64 = 8 * 1024 * 1024
+/**
+ * Some providers (opencode-go) require an affinity header derived from
+ * `options.sessionId`. This plugin has no DSH session of its own, so it uses a
+ * stable pseudo id for the host process.
+ */
+const AGENT_SESSION_ID = `cwb-${randomUUID()}`
+
 const DSH_SERVICE_KEYS = ['llm', 'languageModel', 'model', 'models', 'chat', 'agent', 'ai']
 
 /** Collect callable method names across the prototype chain (class instances). */
@@ -220,6 +227,7 @@ async function suggestVisionModel(llm, provider) {
 
 /** Execute one ✨ template through the DSH host LLM service (text or image). */
 async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, imageMime }) {
+  const bodySessionId = AGENT_SESSION_ID
   const llm = getLlm(ctx)
   if (!llm) {
     throw new ApiError(
@@ -327,6 +335,7 @@ async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, 
       messages,
       system: systemPrompt,
       purpose: 'prompt-template',
+      sessionId: bodySessionId,
       signal,
     }
     for await (const chunk of call.stream(options)) {

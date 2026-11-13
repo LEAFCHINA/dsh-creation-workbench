@@ -2,6 +2,14 @@
 
 First public release: **1.2.2**.
 
+## 2.3.4
+
+- **Fix: DSH agent calls failed on providers that require session affinity**
+  (`opencode-go` returned `MissingSessionID` / `x-opencode-session`). The DSH
+  channel now passes a stable pseudo `sessionId` with each call, which those
+  providers use for routing.
+
+
 ## 2.3.3
 
 - **Fix: image reverse-engineering did not work with the DSH model channel.** The
