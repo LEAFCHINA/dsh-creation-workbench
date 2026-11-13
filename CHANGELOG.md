@@ -2,6 +2,14 @@
 
 First public release: **1.2.2**.
 
+## 3.1.4
+
+- **Fix: 「工作流」标签里的「编辑参数」打开的是 API 设置页。** The workflow board
+  only opened the settings modal at the top (API section), without any target. It now
+  passes the workflow id: the modal jumps to the ComfyUI section and opens that
+  workflow's parameter editor directly.
+
+
 ## 3.1.3
 
 - **Fix: the image slot could not be used in the composer.** The client's param

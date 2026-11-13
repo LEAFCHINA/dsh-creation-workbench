@@ -1,6 +1,6 @@
 {
   "name": "dsh-creation-workbench",
-  "version": "3.1.3",
+  "version": "3.1.4",
   "description": "Personal creation workbench for DeepSeek Harness: workspaces and conversations on the left, canvas-style results, third-party image APIs (OpenAI Images / Grok Imagine) and local ComfyUI workflows. Image editing and video generation are on the roadmap.",
   "type": "module",
   "license": "MIT",

@@ -324,7 +324,7 @@ for (const entry of [registered.sidebar[0], registered.main[0]]) {
 }
 
 console.log('\n== 4. 关键实现存在性（静态） ==')
-ok('BUILD 已递增', /2026-11-13-client-m2-42/.test(code))
+ok('BUILD 已递增', /2026-11-13-client-m2-43/.test(code))
 ok('comfy optgroup 文案存在', /ComfyUI 工作流/.test(code))
 ok('动态参数行类名存在', /iw-composer-params/.test(code))
 ok('参数编辑器存在', /ComfyParamEditor/.test(code))
@@ -394,7 +394,8 @@ if (specSlice) {
   ok('图像槽参数归一化保留 image 类型', slotSpec?.type === 'image' && slotSpec?.role === 'image', JSON.stringify(slotSpec))
   const slotsOf = (workflow) =>
     ((workflow && workflow.params) || []).filter((item) => item && item.type === 'image')
-  ok('图像槽进入图像输入列表', slotsOf({ params: [slotSpec] }).length === 1, 'n/a')
+  ok('工作流编辑跳转已接线', /intent: settingsIntent/.test(code) && /handleEditWorkflowSettings/.test(code) && /comfySectionRef/.test(code))
+ok('图像槽进入图像输入列表', slotsOf({ params: [slotSpec] }).length === 1, 'n/a')
 }
 ok('完成提示带计时', /formatJobTiming/.test(code) && /执行 /.test(code))
 ok('切换会话恢复参数快照', /convParamsRef\.current\[previousId\]/.test(code))

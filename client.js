@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-42'
+    const BUILD = '2026-11-13-client-m2-43'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -5945,7 +5945,11 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     function SettingsModal(props) {
-      const { settings, limits, onClose, onSaved, onToast, onWorkflowsChanged } = props
+      const { settings, limits, onClose, onSaved, onToast, onWorkflowsChanged, intent, onIntentHandled } = props
+      // v3.1.4: opened from the 工作流 tab with a target workflow — jump to the
+      // ComfyUI section and open that workflow's parameter editor right away.
+      const comfySectionRef = useRef(null)
+      const intentHandledRef = useRef('')
       const [baseUrl, setBaseUrl] = useState(str(settings && settings.baseUrl))
       const [models, setModels] = useState(() =>
         (settings && Array.isArray(settings.models) ? settings.models : []).map((model) => ({
@@ -6250,6 +6254,39 @@ window.__ModuleLoader__.load({
         if (comfyFileRef.current) comfyFileRef.current.click()
       }
 
+      useEffect(() => {
+        const workflowId = intent && typeof intent.workflowId === 'string' ? intent.workflowId : ''
+        if (!workflowId || intentHandledRef.current === workflowId) return
+        intentHandledRef.current = workflowId
+        let cancelled = false
+        const run = async () => {
+          try {
+            await openComfyWorkflowEditorRef.current(workflowId)
+          } catch {
+            // the editor reports its own errors
+          }
+          if (cancelled) return
+          setTimeout(() => {
+            const element = comfySectionRef.current
+            if (!element) return
+            try {
+              if (typeof element.scrollIntoView === 'function') {
+                element.scrollIntoView({ block: 'start', behavior: 'auto' })
+              }
+            } catch {
+              // ignore
+            }
+            if (typeof onIntentHandled === 'function') onIntentHandled()
+          }, 80)
+        }
+        void run()
+        return () => {
+          cancelled = true
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [intent && intent.workflowId])
+
+      const openComfyWorkflowEditorRef = useRef(null)
       const openComfyWorkflowEditor = async (workflowId) => {
         if (comfyImporting) return
         setComfyImporting(true)
@@ -6279,6 +6316,8 @@ window.__ModuleLoader__.load({
           setComfyImporting(false)
         }
       }
+
+      openComfyWorkflowEditorRef.current = openComfyWorkflowEditor
 
       const saveComfyWorkflow = async (payload) => {
         const body = {
@@ -7086,7 +7125,7 @@ window.__ModuleLoader__.load({
             { className: 'iw-settings-section-head' },
             h(
               'div',
-              { className: 'iw-settings-section-title' },
+              { className: 'iw-settings-section-title', ref: comfySectionRef },
               '工作流列表',
             ),
             h(
@@ -9945,6 +9984,9 @@ window.__ModuleLoader__.load({
       const [cancellingJobId, setCancellingJobId] = useState('')
       const [toasts, setToasts] = useState([])
       const [settingsOpen, setSettingsOpen] = useState(false)
+      // v3.1.4: when a workflow is opened from the 工作流 tab we pass its id so the
+      // settings modal jumps to ComfyUI instead of landing on the API section.
+      const [settingsIntent, setSettingsIntent] = useState(null)
       // v1.10: first-run proxy onboarding (candidates from bootstrap).
       const [onboard, setOnboard] = useState(null)
       const [onboardBusy, setOnboardBusy] = useState(false)
@@ -11331,6 +11373,17 @@ window.__ModuleLoader__.load({
         setActiveTab('templates')
       }
 
+      /** v3.1.4: open Settings directly on a workflow's parameter editor. */
+      function handleEditWorkflowSettings(workflowId) {
+        const id = str(workflowId)
+        if (!id) {
+          setSettingsOpen(true)
+          return
+        }
+        setSettingsIntent({ workflowId: id })
+        setSettingsOpen(true)
+      }
+
       function handleNewTemplate() {
         setTemplateEdit({
           id: '',
@@ -12201,7 +12254,7 @@ window.__ModuleLoader__.load({
                     ? h(WorkflowBoard, {
                         workflows,
                         onUse: (id) => void applyComfyWorkflowId(id),
-                        onEditWorkflow: () => setSettingsOpen(true),
+                        onEditWorkflow: handleEditWorkflowSettings,
                         onDelete: handleWorkflowDelete,
                         onOpenSettings: () => setSettingsOpen(true),
                       })
@@ -12266,7 +12319,12 @@ window.__ModuleLoader__.load({
           ? h(SettingsModal, {
               settings: settings || normalizeSettings(null),
               limits,
-              onClose: () => setSettingsOpen(false),
+              intent: settingsIntent,
+              onIntentHandled: () => setSettingsIntent(null),
+              onClose: () => {
+                setSettingsOpen(false)
+                setSettingsIntent(null)
+              },
               onSaved: handleSettingsSaved,
               onToast: pushToast,
               onWorkflowsChanged: () => loadWorkflows(),

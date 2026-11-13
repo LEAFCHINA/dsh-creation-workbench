@@ -3,7 +3,11 @@
     /* ------------------------------------------------------------------ */
 
     function SettingsModal(props) {
-      const { settings, limits, onClose, onSaved, onToast, onWorkflowsChanged } = props
+      const { settings, limits, onClose, onSaved, onToast, onWorkflowsChanged, intent, onIntentHandled } = props
+      // v3.1.4: opened from the 工作流 tab with a target workflow — jump to the
+      // ComfyUI section and open that workflow's parameter editor right away.
+      const comfySectionRef = useRef(null)
+      const intentHandledRef = useRef('')
       const [baseUrl, setBaseUrl] = useState(str(settings && settings.baseUrl))
       const [models, setModels] = useState(() =>
         (settings && Array.isArray(settings.models) ? settings.models : []).map((model) => ({
@@ -308,6 +312,39 @@
         if (comfyFileRef.current) comfyFileRef.current.click()
       }
 
+      useEffect(() => {
+        const workflowId = intent && typeof intent.workflowId === 'string' ? intent.workflowId : ''
+        if (!workflowId || intentHandledRef.current === workflowId) return
+        intentHandledRef.current = workflowId
+        let cancelled = false
+        const run = async () => {
+          try {
+            await openComfyWorkflowEditorRef.current(workflowId)
+          } catch {
+            // the editor reports its own errors
+          }
+          if (cancelled) return
+          setTimeout(() => {
+            const element = comfySectionRef.current
+            if (!element) return
+            try {
+              if (typeof element.scrollIntoView === 'function') {
+                element.scrollIntoView({ block: 'start', behavior: 'auto' })
+              }
+            } catch {
+              // ignore
+            }
+            if (typeof onIntentHandled === 'function') onIntentHandled()
+          }, 80)
+        }
+        void run()
+        return () => {
+          cancelled = true
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [intent && intent.workflowId])
+
+      const openComfyWorkflowEditorRef = useRef(null)
       const openComfyWorkflowEditor = async (workflowId) => {
         if (comfyImporting) return
         setComfyImporting(true)
@@ -337,6 +374,8 @@
           setComfyImporting(false)
         }
       }
+
+      openComfyWorkflowEditorRef.current = openComfyWorkflowEditor
 
       const saveComfyWorkflow = async (payload) => {
         const body = {
@@ -1144,7 +1183,7 @@
             { className: 'iw-settings-section-head' },
             h(
               'div',
-              { className: 'iw-settings-section-title' },
+              { className: 'iw-settings-section-title', ref: comfySectionRef },
               '工作流列表',
             ),
             h(

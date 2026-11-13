@@ -1289,6 +1289,9 @@
       const [cancellingJobId, setCancellingJobId] = useState('')
       const [toasts, setToasts] = useState([])
       const [settingsOpen, setSettingsOpen] = useState(false)
+      // v3.1.4: when a workflow is opened from the 工作流 tab we pass its id so the
+      // settings modal jumps to ComfyUI instead of landing on the API section.
+      const [settingsIntent, setSettingsIntent] = useState(null)
       // v1.10: first-run proxy onboarding (candidates from bootstrap).
       const [onboard, setOnboard] = useState(null)
       const [onboardBusy, setOnboardBusy] = useState(false)
@@ -2675,6 +2678,17 @@
         setActiveTab('templates')
       }
 
+      /** v3.1.4: open Settings directly on a workflow's parameter editor. */
+      function handleEditWorkflowSettings(workflowId) {
+        const id = str(workflowId)
+        if (!id) {
+          setSettingsOpen(true)
+          return
+        }
+        setSettingsIntent({ workflowId: id })
+        setSettingsOpen(true)
+      }
+
       function handleNewTemplate() {
         setTemplateEdit({
           id: '',
@@ -3545,7 +3559,7 @@
                     ? h(WorkflowBoard, {
                         workflows,
                         onUse: (id) => void applyComfyWorkflowId(id),
-                        onEditWorkflow: () => setSettingsOpen(true),
+                        onEditWorkflow: handleEditWorkflowSettings,
                         onDelete: handleWorkflowDelete,
                         onOpenSettings: () => setSettingsOpen(true),
                       })
@@ -3610,7 +3624,12 @@
           ? h(SettingsModal, {
               settings: settings || normalizeSettings(null),
               limits,
-              onClose: () => setSettingsOpen(false),
+              intent: settingsIntent,
+              onIntentHandled: () => setSettingsIntent(null),
+              onClose: () => {
+                setSettingsOpen(false)
+                setSettingsIntent(null)
+              },
               onSaved: handleSettingsSaved,
               onToast: pushToast,
               onWorkflowsChanged: () => loadWorkflows(),
