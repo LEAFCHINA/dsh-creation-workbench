@@ -645,4 +645,10 @@
 .iw-agent-mode-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 @media (max-width:1040px){.iw-agent-drawer{width:360px}}
 
+/* v2.5: ComfyUI VRAM indicator */
+.iw-vram{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:transparent;font-size:10.5px;color:var(--dsw-alias-label-secondary);white-space:nowrap}
+.iw-vram-text{font-variant-numeric:tabular-nums}
+.iw-vram-release{border:none;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:10.5px;cursor:pointer;padding:0 2px;border-radius:4px}
+.iw-vram-release:hover{color:var(--dsw-alias-state-error-primary)}
+
 `

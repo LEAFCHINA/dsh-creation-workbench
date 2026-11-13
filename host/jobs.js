@@ -120,6 +120,8 @@ function jobView(job) {
   // v1.2.7: per-task start time so the UI counts from when THIS task actually
   // began executing instead of timing every queued task from enqueue.
   view.startedAt = job.startedAt || null
+  // v2.5: timing breakdown (queue wait / provider run / provider detail).
+  if (isPlainObject(job.timing)) view.timing = { ...job.timing }
   if (job.error) {
     view.error = job.error
     if (job.errorCode) view.code = job.errorCode
@@ -536,6 +538,9 @@ async function runJob(job) {
     }
 
     job.progress = 0.1
+    // v2.5: timing breakdown so "why is it slow" can be answered from the log:
+    // queue wait (enqueue → start), provider call, and the provider's own detail.
+    const runStartedAt = Date.now()
     const result = await provider.generateImages({
       config,
       settings,
@@ -564,6 +569,30 @@ async function runJob(job) {
         if (info.state === 'running' && job.progress < 0.45) job.progress = 0.45
       },
     })
+
+    const runMs = Date.now() - runStartedAt
+    const queuedMs = job.startedAt ? Math.max(0, runStartedAt - Date.parse(job.startedAt)) : 0
+    const providerTiming = isPlainObject(result && result.timing) ? result.timing : null
+    job.timing = {
+      queuedMs,
+      runMs,
+      ...(providerTiming
+        ? {
+            execMs: Number(providerTiming.execMs) || 0,
+            downloadMs: Number(providerTiming.downloadMs) || 0,
+            runs: Number(providerTiming.runs) || 0,
+          }
+        : {}),
+    }
+    void store
+      .logHost(
+        `timing job=${job.jobId} dialect=${job.dialect || '?'} queue=${queuedMs}ms run=${runMs}ms${
+          providerTiming
+            ? ` exec=${job.timing.execMs}ms download=${job.timing.downloadMs}ms runs=${job.timing.runs}`
+            : ''
+        }`,
+      )
+      .catch(() => {})
 
     if (job.cancelRequested) {
       await finalizeCancelled(job)

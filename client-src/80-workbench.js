@@ -1243,6 +1243,8 @@
       const [agentSession, setAgentSession] = useState(null)
       const agentSessionRef = useRef(null)
       const agentReqRef = useRef(0)
+      // v2.5: ComfyUI VRAM usage (models stay resident between runs).
+      const [comfyVram, setComfyVram] = useState(null)
       // v2.1: sidebar activity tab; the main area follows it.
       const [activeTab, setActiveTab] = useState(() => {
         const storedTab = str(storedUiRef.current.activeTab)
@@ -1339,6 +1341,17 @@
       useEffect(() => {
         agentSessionRef.current = agentSession
       }, [agentSession])
+
+      // v2.5: keep the VRAM indicator fresh (ComfyUI keeps models resident).
+      useEffect(() => {
+        if (boot.status !== 'ready' || !workflowsLoaded) return undefined
+        void refreshComfyVram()
+        const timer = setInterval(() => {
+          if (document && document.hidden) return
+          void refreshComfyVram()
+        }, 8000)
+        return () => clearInterval(timer)
+      }, [boot.status, workflowsLoaded])
       useEffect(() => {
         mountedRef.current = true
         const tokens = pollTokensRef.current
@@ -1997,8 +2010,9 @@
               } else if (status === 'cancelled') {
                 pushToast('info', '本次生成已取消')
               } else if (next) {
-                pushToast('success', '图片生成完成')
+                pushToast('success', '图片生成完成' + formatJobTiming(job))
               }
+              void refreshComfyVram()
               return
             }
           }
@@ -2324,6 +2338,65 @@
           }
         } catch (error) {
           // keep the previous list
+        }
+      }
+
+      /* ---- v2.5: ComfyUI VRAM --------------------------------------------- */
+
+      function toGiB(bytes) {
+        const value = num(bytes, 0) / (1024 * 1024 * 1024)
+        return Math.round(value * 10) / 10
+      }
+
+      function normalizeVram(raw) {
+        if (!isObj(raw) || !(num(raw.totalBytes, 0) > 0)) return null
+        return {
+          totalGiB: toGiB(raw.totalBytes),
+          usedGiB: toGiB(raw.usedBytes),
+          freeGiB: toGiB(raw.freeBytes),
+        }
+      }
+
+      async function refreshComfyVram() {
+        if (!mountedRef.current) return
+        try {
+          const data = await rpc('comfy.status')
+          if (!mountedRef.current) return
+          setComfyVram(isObj(data) && data.ok ? normalizeVram(data.vram) : null)
+        } catch (error) {
+          if (mountedRef.current) setComfyVram(null)
+        }
+      }
+
+      async function handleReleaseComfyVram() {
+        let confirmed = true
+        try {
+          confirmed =
+            typeof window.confirm === 'function'
+              ? window.confirm(
+                  '释放 ComfyUI 占用的显存？\n\n这会卸载模型（包括你在 ComfyUI 界面里加载的模型），下次生成需要重新加载。',
+                )
+              : true
+        } catch (error) {
+          confirmed = true
+        }
+        if (!confirmed) return
+        const before = comfyVram
+        try {
+          const data = await rpc('comfy.free')
+          if (!data || data.ok !== true) {
+            pushToast('error', `释放失败：${str(data && data.error) || '未知错误'}`)
+            return
+          }
+          const after = normalizeVram(data.vram)
+          setComfyVram(after)
+          const freed = before && after ? Math.round((before.usedGiB - after.usedGiB) * 10) / 10 : 0
+          pushToast(
+            'success',
+            freed > 0 ? `已释放约 ${freed}G 显存` : '已请求 ComfyUI 释放显存',
+          )
+        } catch (error) {
+          pushToast('error', `释放失败：${(error && error.message) || error}`)
         }
       }
 
@@ -3337,6 +3410,8 @@
                     onUseTemplate: handleUseTemplate,
                     onSaveAsTemplate: handleSaveAsTemplate,
                     onOpenAgentSession: openAgentSession,
+                    vram: comfyVram,
+                    onReleaseVram: () => void handleReleaseComfyVram(),
                   }),
                   ),
                   activeTab === 'workflows'

@@ -32,7 +32,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-13-host-33'
+export const HOST_BUILD = '2026-11-13-host-35'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -347,6 +347,12 @@ async function dispatchOp(payload, env) {
       return templates.deleteTemplate(payload.id)
     case 'template.touch':
       return templates.touchTemplate(payload.id)
+
+    /* v2.5: release ComfyUI VRAM on demand (models stay resident otherwise). */
+    case 'comfy.free': {
+      const settings = await store.readSettingsRaw()
+      return comfy.freeComfyMemory(settings)
+    }
 
     /* v1.2.6: live ComfyUI queue snapshot (running/pending prompt ids). */
     case 'comfy.queue': {

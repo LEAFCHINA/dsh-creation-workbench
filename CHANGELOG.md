@@ -2,6 +2,27 @@
 
 First public release: **1.2.2**.
 
+## 2.5.0 — ComfyUI 显存常驻可见 + 释放按钮 + 耗时诊断
+
+- **VRAM indicator in the composer** (ComfyUI mode): shows
+  `显存 30.5/31.8G` from `/system_stats`, refreshed every 8 s and after each run.
+  ComfyUI keeps models resident between runs — that is what makes repeated
+  generations fast — so the plugin never frees memory on its own.
+- **「释放」 button**: calls ComfyUI `POST /free` (`unload_models` +
+  `free_memory`) and reports how much was reclaimed. It unloads every loaded
+  model, including ones you loaded from the ComfyUI UI, so it asks first.
+  Models you warmed up in ComfyUI are therefore reused by this plugin until you
+  release them.
+- **Timing diagnostics**: each run logs
+  `timing job=… queue=…ms run=…ms exec=…ms download=…ms` plus
+  `comfy run workflow=… prompt=… exec=…ms download=…ms`, and the completion toast
+  shows the breakdown (执行 / 保存 / 排队). A slow `exec` on a workflow that was
+  fast before means ComfyUI had to reload or swap a model.
+- **Faster multi-turn agent calls**: DSH model metadata (vision capability +
+  reasoning efforts) is resolved once and cached for 5 minutes instead of three
+  lookups per turn.
+
+
 ## 2.4.0 — ✨ Agent 临时会话
 
 - **Agent templates now open a temporary chat drawer** (right side, chat layout:

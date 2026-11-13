@@ -261,10 +261,62 @@ function sanitizeDevices(raw) {
       name: String(item.name == null ? '' : item.name),
       type: String(item.type == null ? '' : item.type),
       vram_total: finiteOrNull(item.vram_total) || 0,
+      vram_free: finiteOrNull(item.vram_free) || 0,
     })
     if (devices.length >= 32) break
   }
   return devices
+}
+
+/** Aggregate VRAM across devices (v2.5). */
+function summarizeVram(devices) {
+  let total = 0
+  let free = 0
+  let count = 0
+  for (const device of devices) {
+    if (!(device.vram_total > 0)) continue
+    total += device.vram_total
+    free += device.vram_free
+    count += 1
+  }
+  if (!count) return null
+  return {
+    totalBytes: total,
+    freeBytes: Math.max(0, free),
+    usedBytes: Math.max(0, total - free),
+    devices: count,
+  }
+}
+
+/**
+ * v2.5: release ComfyUI's VRAM (POST /free).
+ *
+ * ComfyUI keeps models resident between runs — that is what makes repeated
+ * generations fast — so this plugin never frees automatically. The user asks for
+ * it explicitly when the GPU is needed elsewhere.
+ */
+export async function freeComfyMemory(settings) {
+  const baseUrl = store.normalizeComfyBaseUrl(settings?.comfyBaseUrl)
+  if (!baseUrl) return { ok: false, error: '尚未配置 ComfyUI 服务地址' }
+  try {
+    const result = await comfyRequest(baseUrl, {
+      path: '/free',
+      method: 'POST',
+      body: { unload_models: true, free_memory: true },
+      timeoutMs: STATUS_TIMEOUT_MS,
+    })
+    if (!result.ok) {
+      return { ok: false, baseUrl, error: `ComfyUI 拒绝释放请求（HTTP ${result.status}）` }
+    }
+    // Read the stats again so the caller can show the reclaimed memory.
+    const after = await comfyStatus(settings)
+    return { ok: true, baseUrl, vram: after && after.ok ? after.vram : null }
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      return { ok: false, baseUrl, error: '释放显存超时' }
+    }
+    return { ok: false, baseUrl, error: String(error?.message || error) }
+  }
 }
 
 /** CONTRACT §2.2: never throws — returns `{ ok:false, error }` on failure. */
@@ -287,6 +339,7 @@ export async function comfyStatus(settings) {
       baseUrl,
       version: String(system.comfyui_version == null ? '' : system.comfyui_version),
       devices: sanitizeDevices(result.data.devices),
+      vram: summarizeVram(sanitizeDevices(result.data.devices)),
     }
   } catch (error) {
     if (error?.name === 'AbortError') {
@@ -1276,6 +1329,7 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
     : workflow.name
   if (isPlainObject(params)) params.displayName = displayName
 
+  const jobTiming = { execMs: 0, downloadMs: 0, runs: 0 }
   const specification = Array.isArray(workflow.params) ? workflow.params : []
   const count = normalizeGenerationCount(rawParams.n)
   const { values, warnings } = resolveWorkflowValues(specification, rawParams.workflowParams, prompt)
@@ -1337,6 +1391,7 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
         params.workflowRandomValues = { ...usedRandom }
       }
       if (onProgress) onProgress(0.1)
+      const submittedAt = Date.now()
       const promptId = await submitPrompt(baseUrl, graph, clientId, { signal, timeoutMs })
       if (onProgress) onProgress(0.3)
       let historyEntry
@@ -1346,10 +1401,24 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
         if (error?.name === 'AbortError') await cancelRemotePrompt(baseUrl, promptId)
         throw error
       }
+      const executedMs = Date.now() - submittedAt
       if (onProgress) onProgress(0.9)
       const items = collectHistoryImages(historyEntry)
+      const downloadStartedAt = Date.now()
       const batchImages = await downloadImages(baseUrl, items, { signal, timeoutMs })
+      const downloadMs = Date.now() - downloadStartedAt
       images.push(...batchImages)
+      // v2.5: one timing line per upstream run. A run that is far slower than
+      // the previous one for the same workflow usually means ComfyUI had to load
+      // (or swap) a model again.
+      void store
+        .logHost(
+          `comfy run workflow=${workflowId} name=${truncate(displayName, 40)} prompt=${promptId} exec=${executedMs}ms download=${downloadMs}ms images=${batchImages.length}`,
+        )
+        .catch(() => {})
+      jobTiming.execMs = (jobTiming.execMs || 0) + executedMs
+      jobTiming.downloadMs = (jobTiming.downloadMs || 0) + downloadMs
+      jobTiming.runs = (jobTiming.runs || 0) + 1
     }
   } catch (error) {
     if (warnings.length > 0) void logComfyWarnings(workflowId, warnings)
@@ -1363,7 +1432,7 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
       400,
     )
   }
-  return { dialect: 'comfyui', mode: 'workflow', images }
+  return { dialect: 'comfyui', mode: 'workflow', images, timing: jobTiming }
 }
 
 function logComfyWarnings(workflowId, warnings) {

@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-34'
+    const BUILD = '2026-11-13-client-m2-35'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -765,6 +765,12 @@ window.__ModuleLoader__.load({
 .iw-agent-file{display:none}
 .iw-agent-mode-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 @media (max-width:1040px){.iw-agent-drawer{width:360px}}
+
+/* v2.5: ComfyUI VRAM indicator */
+.iw-vram{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:transparent;font-size:10.5px;color:var(--dsw-alias-label-secondary);white-space:nowrap}
+.iw-vram-text{font-variant-numeric:tabular-nums}
+.iw-vram-release{border:none;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:10.5px;cursor:pointer;padding:0 2px;border-radius:4px}
+.iw-vram-release:hover{color:var(--dsw-alias-state-error-primary)}
 
 `
 /* ===== 10-helpers.js ===== */
@@ -1705,6 +1711,20 @@ window.__ModuleLoader__.load({
       const list = Array.isArray(template?.variables) ? template.variables : []
       for (const variable of list) values[variable.key] = variable.default
       return values
+    }
+
+    /** v2.5: one-line timing summary for the completion toast. */
+    function formatJobTiming(job) {
+      if (!isObj(job) || !isObj(job.timing)) return ''
+      const timing = job.timing
+      const parts = []
+      const exec = num(timing.execMs, 0)
+      const download = num(timing.downloadMs, 0)
+      const queued = num(timing.queuedMs, 0)
+      if (exec > 0) parts.push('执行 ' + (exec / 1000).toFixed(1) + 's')
+      if (download >= 300) parts.push('保存 ' + (download / 1000).toFixed(1) + 's')
+      if (queued >= 300) parts.push('排队 ' + (queued / 1000).toFixed(1) + 's')
+      return parts.length ? '（' + parts.join(' · ') + '）' : ''
     }
 
     function jobProgressText(job) {
@@ -3980,6 +4000,8 @@ window.__ModuleLoader__.load({
         onUseTemplate,
         onSaveAsTemplate,
         onOpenAgentSession,
+        vram,
+        onReleaseVram,
         refs,
         onRemoveRef,
         onAddFiles,
@@ -5099,6 +5121,25 @@ window.__ModuleLoader__.load({
                     })
                   : null,
               ),
+              comfy && vram && vram.totalBytes > 0
+                ? h(
+                    'span',
+                    { className: 'iw-vram', title: 'ComfyUI 显存占用（模型常驻时会保持高位）' },
+                    h('span', { className: 'iw-vram-text' },
+                      `显存 ${vram.usedGiB}/${vram.totalGiB}G`,
+                    ),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'iw-vram-release',
+                        title: '释放 ComfyUI 占用的显存（包括你在 ComfyUI 里加载的模型）',
+                        onClick: onReleaseVram,
+                      },
+                      '释放',
+                    ),
+                  )
+                : null,
               // v1.3: send button is a sibling of the wrapping controls group
               // (fixed flex item at the row end) so it can never be clipped.
               h(
@@ -9515,6 +9556,8 @@ window.__ModuleLoader__.load({
       const [agentSession, setAgentSession] = useState(null)
       const agentSessionRef = useRef(null)
       const agentReqRef = useRef(0)
+      // v2.5: ComfyUI VRAM usage (models stay resident between runs).
+      const [comfyVram, setComfyVram] = useState(null)
       // v2.1: sidebar activity tab; the main area follows it.
       const [activeTab, setActiveTab] = useState(() => {
         const storedTab = str(storedUiRef.current.activeTab)
@@ -9611,6 +9654,17 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         agentSessionRef.current = agentSession
       }, [agentSession])
+
+      // v2.5: keep the VRAM indicator fresh (ComfyUI keeps models resident).
+      useEffect(() => {
+        if (boot.status !== 'ready' || !workflowsLoaded) return undefined
+        void refreshComfyVram()
+        const timer = setInterval(() => {
+          if (document && document.hidden) return
+          void refreshComfyVram()
+        }, 8000)
+        return () => clearInterval(timer)
+      }, [boot.status, workflowsLoaded])
       useEffect(() => {
         mountedRef.current = true
         const tokens = pollTokensRef.current
@@ -10269,8 +10323,9 @@ window.__ModuleLoader__.load({
               } else if (status === 'cancelled') {
                 pushToast('info', '本次生成已取消')
               } else if (next) {
-                pushToast('success', '图片生成完成')
+                pushToast('success', '图片生成完成' + formatJobTiming(job))
               }
+              void refreshComfyVram()
               return
             }
           }
@@ -10596,6 +10651,65 @@ window.__ModuleLoader__.load({
           }
         } catch (error) {
           // keep the previous list
+        }
+      }
+
+      /* ---- v2.5: ComfyUI VRAM --------------------------------------------- */
+
+      function toGiB(bytes) {
+        const value = num(bytes, 0) / (1024 * 1024 * 1024)
+        return Math.round(value * 10) / 10
+      }
+
+      function normalizeVram(raw) {
+        if (!isObj(raw) || !(num(raw.totalBytes, 0) > 0)) return null
+        return {
+          totalGiB: toGiB(raw.totalBytes),
+          usedGiB: toGiB(raw.usedBytes),
+          freeGiB: toGiB(raw.freeBytes),
+        }
+      }
+
+      async function refreshComfyVram() {
+        if (!mountedRef.current) return
+        try {
+          const data = await rpc('comfy.status')
+          if (!mountedRef.current) return
+          setComfyVram(isObj(data) && data.ok ? normalizeVram(data.vram) : null)
+        } catch (error) {
+          if (mountedRef.current) setComfyVram(null)
+        }
+      }
+
+      async function handleReleaseComfyVram() {
+        let confirmed = true
+        try {
+          confirmed =
+            typeof window.confirm === 'function'
+              ? window.confirm(
+                  '释放 ComfyUI 占用的显存？\n\n这会卸载模型（包括你在 ComfyUI 界面里加载的模型），下次生成需要重新加载。',
+                )
+              : true
+        } catch (error) {
+          confirmed = true
+        }
+        if (!confirmed) return
+        const before = comfyVram
+        try {
+          const data = await rpc('comfy.free')
+          if (!data || data.ok !== true) {
+            pushToast('error', `释放失败：${str(data && data.error) || '未知错误'}`)
+            return
+          }
+          const after = normalizeVram(data.vram)
+          setComfyVram(after)
+          const freed = before && after ? Math.round((before.usedGiB - after.usedGiB) * 10) / 10 : 0
+          pushToast(
+            'success',
+            freed > 0 ? `已释放约 ${freed}G 显存` : '已请求 ComfyUI 释放显存',
+          )
+        } catch (error) {
+          pushToast('error', `释放失败：${(error && error.message) || error}`)
         }
       }
 
@@ -11609,6 +11723,8 @@ window.__ModuleLoader__.load({
                     onUseTemplate: handleUseTemplate,
                     onSaveAsTemplate: handleSaveAsTemplate,
                     onOpenAgentSession: openAgentSession,
+                    vram: comfyVram,
+                    onReleaseVram: () => void handleReleaseComfyVram(),
                   }),
                   ),
                   activeTab === 'workflows'

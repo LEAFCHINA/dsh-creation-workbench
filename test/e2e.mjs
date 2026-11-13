@@ -244,6 +244,13 @@ try {
   ok('开启随机后回传 steps 取值', viewRandomSteps?.randomValues?.p3 === sentSteps, JSON.stringify(viewRandomSteps?.randomValues))
   ok('未开启随机的 seed 仍用指定值', mockState.lastPromptBody?.prompt?.['3']?.inputs?.seed === 777, String(mockState.lastPromptBody?.prompt?.['3']?.inputs?.seed))
 
+  const timedJob = view
+  ok(
+    'job.get 带 timing 明细',
+    !!timedJob?.timing && typeof timedJob.timing.runMs === 'number',
+    JSON.stringify(timedJob?.timing),
+  )
+
   section('4c. model 前缀优先于过期 workflowId')
   const workflowB = JSON.parse(JSON.stringify(workflow))
   workflowB['3'].inputs.steps = 11
@@ -284,6 +291,12 @@ try {
 
   section('4d. 队列与跨会话任务列表')
   resetState()
+  const stats = await h.op('comfy.status')
+  ok(
+    'comfy.status 返回显存汇总',
+    !!stats?.vram && stats.vram.totalBytes > 0 && stats.vram.usedBytes >= 0,
+    JSON.stringify(stats?.vram),
+  )
   const queueInfo = await h.op('comfy.queue')
   ok(
     'comfy.queue 可用',
@@ -331,6 +344,9 @@ try {
     JSON.stringify(listAfter?.jobs?.length),
   )
   mockState.neverComplete = false
+
+  const freed = await h.op('comfy.free')
+  ok('comfy.free 调用成功', freed?.ok === true, JSON.stringify(freed))
 
   section('4e. 本地 ComfyUI 任务不受 300 秒超时限制')
   const savedTimeout = await h.op('settings.set', { jobTimeoutMs: 10000 })

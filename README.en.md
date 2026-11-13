@@ -58,6 +58,7 @@ ComfyUI workflows in the editor — exposed node inputs become composer controls
 - **Smart image count**: when the workflow exposes `batch_size` the batch is queued once; otherwise the workflow is queued once per image.
 - **Workflow categories**: edit / image / video / audio / model, or any custom name; the composer dropdown is grouped by category.
 - **No overall timeout for local jobs**: the first run may need to load a model for minutes — jobs run until done or cancelled (third-party API jobs keep a configurable timeout).
+- **Resident-mode visibility + release button**: the composer shows ComfyUI VRAM usage; models stay resident to speed up the next run, and 「释放」 frees them on demand (including models you loaded in the ComfyUI UI).
 
 ### Prompt templates and agents
 

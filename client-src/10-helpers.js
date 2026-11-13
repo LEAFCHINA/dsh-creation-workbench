@@ -937,6 +937,20 @@
       return values
     }
 
+    /** v2.5: one-line timing summary for the completion toast. */
+    function formatJobTiming(job) {
+      if (!isObj(job) || !isObj(job.timing)) return ''
+      const timing = job.timing
+      const parts = []
+      const exec = num(timing.execMs, 0)
+      const download = num(timing.downloadMs, 0)
+      const queued = num(timing.queuedMs, 0)
+      if (exec > 0) parts.push('执行 ' + (exec / 1000).toFixed(1) + 's')
+      if (download >= 300) parts.push('保存 ' + (download / 1000).toFixed(1) + 's')
+      if (queued >= 300) parts.push('排队 ' + (queued / 1000).toFixed(1) + 's')
+      return parts.length ? '（' + parts.join(' · ') + '）' : ''
+    }
+
     function jobProgressText(job) {
       if (!isObj(job)) return '生成中…'
       const status = str(job.status) || 'running'

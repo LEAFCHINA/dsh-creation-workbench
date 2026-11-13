@@ -16,6 +16,8 @@
         onUseTemplate,
         onSaveAsTemplate,
         onOpenAgentSession,
+        vram,
+        onReleaseVram,
         refs,
         onRemoveRef,
         onAddFiles,
@@ -1135,6 +1137,25 @@
                     })
                   : null,
               ),
+              comfy && vram && vram.totalBytes > 0
+                ? h(
+                    'span',
+                    { className: 'iw-vram', title: 'ComfyUI 显存占用（模型常驻时会保持高位）' },
+                    h('span', { className: 'iw-vram-text' },
+                      `显存 ${vram.usedGiB}/${vram.totalGiB}G`,
+                    ),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'iw-vram-release',
+                        title: '释放 ComfyUI 占用的显存（包括你在 ComfyUI 里加载的模型）',
+                        onClick: onReleaseVram,
+                      },
+                      '释放',
+                    ),
+                  )
+                : null,
               // v1.3: send button is a sibling of the wrapping controls group
               // (fixed flex item at the row end) so it can never be clipped.
               h(

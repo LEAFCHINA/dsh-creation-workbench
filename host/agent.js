@@ -200,11 +200,33 @@ function canonicalBase64(value) {
   return Buffer.from(text, 'base64').toString('base64')
 }
 
+/**
+ * v2.5: model metadata lookups are adapter round-trips. Cache them briefly so a
+ * multi-turn session does not pay for the same lookup on every turn.
+ */
+const MODEL_INFO_TTL_MS = 5 * 60 * 1000
+const modelInfoCache = new Map()
+
+async function resolveModelInfoCached(llm, provider, model) {
+  const key = `${provider}::${model}`
+  const cached = modelInfoCache.get(key)
+  if (cached && Date.now() - cached.at < MODEL_INFO_TTL_MS) return cached.info
+  let info = null
+  try {
+    if (typeof llm.resolveModelInfo === 'function') {
+      info = await llm.resolveModelInfo(provider, model)
+    }
+  } catch {
+    info = null
+  }
+  modelInfoCache.set(key, { at: Date.now(), info })
+  return info
+}
+
 /** Whether the selected DSH model advertises image input. */
 async function dshModelSupportsImage(llm, provider, model) {
   try {
-    if (typeof llm.resolveModelInfo !== 'function') return null
-    const info = await llm.resolveModelInfo(provider, model)
+    const info = await resolveModelInfoCached(llm, provider, model)
     const modalities = Array.isArray(info?.inputModalities) ? info.inputModalities : []
     if (!modalities.length) return null
     return modalities.indexOf('image') >= 0
@@ -347,7 +369,7 @@ async function runDshAgent({ ctx, settings, template, agent, conversation, outpu
   let reasoningEfforts = []
   let defaultEffort
   try {
-    const info = await llm.resolveModelInfo(provider, model)
+    const info = await resolveModelInfoCached(llm, provider, model)
     if (info && info.reasoning && Array.isArray(info.reasoning.efforts)) {
       reasoningEfforts = info.reasoning.efforts.map((effort) => String(effort?.id || '')).filter(Boolean)
       defaultEffort = info.reasoning.defaultEffort

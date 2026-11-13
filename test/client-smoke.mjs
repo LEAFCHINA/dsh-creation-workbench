@@ -324,7 +324,7 @@ for (const entry of [registered.sidebar[0], registered.main[0]]) {
 }
 
 console.log('\n== 4. 关键实现存在性（静态） ==')
-ok('BUILD 已递增', /2026-11-13-client-m2-34/.test(code))
+ok('BUILD 已递增', /2026-11-13-client-m2-35/.test(code))
 ok('comfy optgroup 文案存在', /ComfyUI 工作流/.test(code))
 ok('动态参数行类名存在', /iw-composer-params/.test(code))
 ok('参数编辑器存在', /ComfyParamEditor/.test(code))
@@ -363,6 +363,9 @@ ok('会话结果送入输入框', /insertFromAgent/.test(code) && /送入选中�
 ok('临时会话本地持久化', /dsh\.creation-workbench\.v1\.agent\./.test(code))
 ok('交互方式选择器存在', /临时会话（可多轮追问）/.test(code))
 ok('@ 菜单优先 Agent 模板', /✨ Agent · 会话/.test(code) && /✨ Agent · 快问快答/.test(code))
+ok('显存指示与释放按钮存在', /iw-vram/.test(code) && /释放\/ComfyUI 显存|释放 ComfyUI 占用/.test(code) === false ? /iw-vram-release/.test(code) : true)
+ok('comfy.free 已接线', /rpc\('comfy\.free'\)/.test(code))
+ok('完成提示带计时', /formatJobTiming/.test(code) && /执行 /.test(code))
 ok('切换会话恢复参数快照', /convParamsRef\.current\[previousId\]/.test(code))
 ok('排队任务显示排队中', /排队中…/.test(code) && /queued/.test(code))
 ok('本地任务无超时文案', /本地 ComfyUI 任务不设超时/.test(code))

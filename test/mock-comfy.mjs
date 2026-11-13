@@ -1,5 +1,5 @@
 // Mock ComfyUI server for host-side end-to-end tests.
-// Endpoints implemented: /system_stats /object_info /prompt /history/:id /view /queue /interrupt
+// Endpoints implemented: /system_stats /object_info /prompt /history/:id /view /queue /interrupt /free
 import { createServer } from 'node:http'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -88,6 +88,11 @@ export function startMockComfy({ port = 18188 } = {}) {
         system: { os: 'nt', comfyui_version: '0.3.99-mock', python_version: '3.12.0' },
         devices: [{ name: 'mock-cuda:0', type: 'cuda', vram_total: 25757220864, vram_free: 20000000000 }],
       })
+    }
+
+    if (path === '/free' && req.method === 'POST') {
+      state.freeCalls = (state.freeCalls || 0) + 1
+      return send(res, 200, {})
     }
 
     if (path === '/object_info') {
