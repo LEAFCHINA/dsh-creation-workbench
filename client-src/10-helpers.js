@@ -870,6 +870,7 @@
         name: str(source.name) || '未命名模板',
         category: str(source.category) || '通用',
         kind: source.kind === 'agent' ? 'agent' : 'text',
+        mode: source.mode === 'single' ? 'single' : 'chat',
         agent: normalizeAgentConfig(source.agent),
         content,
         variables: Array.isArray(source.variables)

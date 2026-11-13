@@ -227,8 +227,64 @@ async function suggestVisionModel(llm, provider) {
 }
 
 /** Execute one ✨ template through the DSH host LLM service (text or image). */
-async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, imageMime }) {
-  const bodySessionId = AGENT_SESSION_ID
+/** Build the DSH message list for a multi-turn conversation (v2.4.0). */
+async function buildDshMessages({ ctx, conversation, template, agent }) {
+  const messages = []
+  let firstUser = true
+  for (const turn of conversation) {
+    if (turn.role === 'assistant') {
+      messages.push({
+        id: randomUUID(),
+        role: 'assistant',
+        content: [{ type: 'text', text: turn.text }],
+        source: { kind: 'creation-workbench-agent' },
+      })
+      continue
+    }
+    const userText = firstUser
+      ? buildUserContent(template, turn.text, '', '')
+      : turn.text || '（见图片）'
+    firstUser = false
+    let content = [{ type: 'text', text: userText }]
+    if (turn.imageBase64) {
+      const attachments = getAttachments(ctx)
+      if (!attachments || typeof attachments.admitPromptContent !== 'function') {
+        throw new ApiError(
+          '当前环境没有可用的附件存储服务，无法读取图片；请改用 Agent API 通道',
+          'AGENT_ATTACHMENT_UNAVAILABLE',
+          400,
+        )
+      }
+      try {
+        content = await attachments.admitPromptContent([
+          { type: 'text', text: userText },
+          {
+            type: 'image',
+            data: canonicalBase64(turn.imageBase64),
+            mediaType: turn.imageMime,
+            name: 'reference.png',
+          },
+        ])
+      } catch (error) {
+        throw new ApiError(
+          `图片无法送入 DSH 模型：${String(error?.message || error)}（可换一张更小的图片或改用 Agent API）`,
+          'AGENT_IMAGE_REJECTED',
+          400,
+        )
+      }
+    }
+    messages.push({
+      id: randomUUID(),
+      role: 'user',
+      content,
+      source: { kind: 'creation-workbench-agent' },
+    })
+  }
+  return messages
+}
+
+/** Execute one ✨ template conversation through the DSH host LLM service. */
+async function runDshAgent({ ctx, settings, template, agent, conversation, outputFormat }) {
   const llm = getLlm(ctx)
   if (!llm) {
     throw new ApiError(
@@ -268,15 +324,8 @@ async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, 
   }
 
   const systemPrompt = agentSystemPrompt(template, agent)
-  const userText = buildUserContent(template, text, '', '')
-  const encodedImage = imageBase64 ? canonicalBase64(imageBase64) : ''
-
-  let content = [{ type: 'text', text: userText }]
-  if (encodedImage) {
-    const mime =
-      typeof imageMime === 'string' && /^image\/(png|jpeg|webp)$/i.test(imageMime)
-        ? imageMime.toLowerCase()
-        : 'image/png'
+  const hasImage = conversation.some((turn) => !!turn.imageBase64)
+  if (hasImage) {
     const supportsImage = await dshModelSupportsImage(llm, provider, model)
     if (supportsImage === false) {
       const suggestion = await suggestVisionModel(llm, provider)
@@ -288,36 +337,9 @@ async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, 
         400,
       )
     }
-    const attachments = getAttachments(ctx)
-    if (!attachments || typeof attachments.admitPromptContent !== 'function') {
-      throw new ApiError(
-        '当前环境没有可用的附件存储服务，无法读取图片；请改用 Agent API 通道',
-        'AGENT_ATTACHMENT_UNAVAILABLE',
-        400,
-      )
-    }
-    try {
-      content = await attachments.admitPromptContent([
-        { type: 'text', text: userText },
-        { type: 'image', data: encodedImage, mediaType: mime, name: 'reference.png' },
-      ])
-    } catch (error) {
-      throw new ApiError(
-        `图片无法送入 DSH 模型：${String(error?.message || error)}（可换一张更小的图片或改用 Agent API）`,
-        'AGENT_IMAGE_REJECTED',
-        400,
-      )
-    }
   }
+  const messages = await buildDshMessages({ ctx, conversation, template, agent })
 
-  const messages = [
-    {
-      id: randomUUID(),
-      role: 'user',
-      content,
-      source: { kind: 'creation-workbench-agent' },
-    },
-  ]
   // v2.3.5: reasoning-capable models can burn the whole output budget on
   // reasoning and return no text at all. Ask for the smallest reasoning effort
   // and retry with a bigger budget when the first attempt comes back empty or
@@ -356,7 +378,7 @@ async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, 
       messages,
       system: systemPrompt,
       purpose: 'prompt-template',
-      sessionId: bodySessionId,
+      sessionId: AGENT_SESSION_ID,
       signal,
     }
     let text = ''
@@ -421,8 +443,92 @@ async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, 
     prompt,
     model: `${provider}/${model}`,
     source: 'dsh',
-    outputFormat: agent.outputFormat === 'prompt_negative' ? 'prompt_negative' : 'prompt',
+    outputFormat,
+    turns: conversation.length,
+    elapsedMs: Date.now() - startedAt,
   }
+}
+
+/**
+ * v2.4.0: normalize one conversation for the agent channels.
+ *
+ * Accepts the multi-turn form `messages: [{role, text, imageBase64?, imageMime?}]`
+ * and the legacy single-turn `input: {text, imageBase64, imageMime}`.
+ * Returns the conversation (user/assistant turns only) capped by count and size.
+ */
+const MAX_TURNS = 16
+const MAX_TURN_TEXT = 8000
+const MAX_CONTEXT_CHARS = 40000
+
+function normalizeConversation(body, agent, allowImage) {
+  const raw = Array.isArray(body.messages) ? body.messages : null
+  const turns = []
+  if (raw) {
+    for (const item of raw) {
+      if (!isPlainObject(item)) continue
+      const role = item.role === 'assistant' ? 'assistant' : item.role === 'user' ? 'user' : ''
+      if (!role) continue
+      const text = typeof item.text === 'string' ? item.text.trim().slice(0, MAX_TURN_TEXT) : ''
+      const imageBase64 = typeof item.imageBase64 === 'string' ? item.imageBase64 : ''
+      if (imageBase64 && !allowImage) {
+        throw new ApiError('该 Agent 模板不接受图片输入', 'INVALID_REQUEST', 400)
+      }
+      if (imageBase64.length > MAX_IMAGE_BASE64) {
+        throw new ApiError('图片过大，请换一张小一点的图片（≤ 6MB）', 'INVALID_REQUEST', 400)
+      }
+      if (role === 'assistant') {
+        if (!text) continue
+        turns.push({ role, text })
+        continue
+      }
+      if (!text && !imageBase64) continue
+      const imageMime =
+        typeof item.imageMime === 'string' && /^image\/(png|jpeg|webp)$/i.test(item.imageMime)
+          ? item.imageMime.toLowerCase()
+          : 'image/png'
+      turns.push({ role, text, imageBase64, imageMime })
+    }
+  } else {
+    const input = isPlainObject(body.input) ? body.input : {}
+    const text = typeof input.text === 'string' ? input.text.trim().slice(0, MAX_TURN_TEXT) : ''
+    const imageBase64 = typeof input.imageBase64 === 'string' ? input.imageBase64 : ''
+    if (imageBase64 && !allowImage) {
+      throw new ApiError('该 Agent 模板不接受图片输入', 'INVALID_REQUEST', 400)
+    }
+    if (imageBase64.length > MAX_IMAGE_BASE64) {
+      throw new ApiError('图片过大，请换一张小一点的图片（≤ 6MB）', 'INVALID_REQUEST', 400)
+    }
+    const imageMime =
+      typeof input.imageMime === 'string' && /^image\/(png|jpeg|webp)$/i.test(input.imageMime)
+        ? input.imageMime.toLowerCase()
+        : 'image/png'
+    if (text || imageBase64) turns.push({ role: 'user', text, imageBase64, imageMime })
+  }
+  if (!turns.length) {
+    throw new ApiError('请输入文字或上传一张图片', 'INVALID_REQUEST', 400)
+  }
+  const last = turns[turns.length - 1]
+  if (last.role !== 'user') {
+    throw new ApiError('最后一条消息必须来自用户', 'INVALID_REQUEST', 400)
+  }
+  // Keep the most recent turns; the template's system prompt carries the rest.
+  let trimmed = turns.slice(-MAX_TURNS)
+  let total = trimmed.reduce((sum, turn) => sum + turn.text.length, 0)
+  while (trimmed.length > 1 && total > MAX_CONTEXT_CHARS) {
+    const dropped = trimmed.shift()
+    total -= dropped.text.length
+  }
+  // The conversation must still start with a user turn for chat-style providers.
+  while (trimmed.length > 1 && trimmed[0].role !== 'user') trimmed.shift()
+  return trimmed
+}
+
+function turnToApiContent(turn) {
+  if (!turn.imageBase64) return turn.text
+  return [
+    { type: 'text', text: turn.text || '（见图片）' },
+    { type: 'image_url', image_url: { url: `data:${turn.imageMime};base64,${turn.imageBase64}` } },
+  ]
 }
 
 export async function runAgent({ settings, payload, ctx } = {}) {
@@ -432,31 +538,23 @@ export async function runAgent({ settings, payload, ctx } = {}) {
     throw new ApiError('该模板不是 Agent 模板', 'INVALID_REQUEST', 400)
   }
   const agent = isPlainObject(template.agent) ? template.agent : {}
-  const input = isPlainObject(body.input) ? body.input : {}
-  const text = typeof input.text === 'string' ? input.text.trim().slice(0, 4000) : ''
-  const imageBase64 = typeof input.imageBase64 === 'string' ? input.imageBase64 : ''
-  const imageMime =
-    typeof input.imageMime === 'string' && /^image\/(png|jpeg|webp)$/i.test(input.imageMime)
-      ? input.imageMime
-      : 'image/png'
   const allowImage = Array.isArray(agent.inputTypes) && agent.inputTypes.indexOf('image') >= 0
-  if (imageBase64 && !allowImage) {
-    throw new ApiError('该 Agent 模板不接受图片输入', 'INVALID_REQUEST', 400)
-  }
-  if (!text && !imageBase64) {
-    throw new ApiError('请输入文字或上传一张图片', 'INVALID_REQUEST', 400)
-  }
-  if (imageBase64.length > MAX_IMAGE_BASE64) {
-    throw new ApiError('图片过大，请换一张小一点的图片（≤ 6MB）', 'INVALID_REQUEST', 400)
-  }
+  const conversation = normalizeConversation(body, agent, allowImage)
+  const outputFormat = agent.outputFormat === 'prompt_negative' ? 'prompt_negative' : 'prompt'
+
   if (settings?.agentSource === 'dsh') {
-    return runDshAgent({ ctx, settings, template, agent, text, imageBase64, imageMime })
+    return runDshAgent({ ctx, settings, template, agent, conversation, outputFormat })
   }
+
   const systemPrompt = agentSystemPrompt(template, agent)
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: buildUserContent(template, text, imageBase64, imageMime) },
-  ]
+  const messages = [{ role: 'system', content: systemPrompt }]
+  for (const turn of conversation) {
+    messages.push({
+      role: turn.role,
+      content: turn.role === 'user' ? turnToApiContent(turn) : turn.text,
+    })
+  }
+  const startedAt = Date.now()
   const result = await provider.runAgentChat({
     settings,
     messages,
@@ -465,6 +563,9 @@ export async function runAgent({ settings, payload, ctx } = {}) {
   return {
     prompt: result.prompt,
     model: result.model,
-    outputFormat: agent.outputFormat === 'prompt_negative' ? 'prompt_negative' : 'prompt',
+    source: 'api',
+    outputFormat,
+    turns: conversation.length,
+    elapsedMs: Date.now() - startedAt,
   }
 }

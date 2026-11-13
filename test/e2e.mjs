@@ -379,6 +379,7 @@ try {
   const tplItem = (tplList?.templates || []).find((item) => item.id === tplId)
   ok('template.list 含模板与变量', !!tplItem && tplItem.variables.length === 2, JSON.stringify(tplItem))
   ok('模板绑定工作流分类保留', tplItem?.bindWorkflowCategory === 'image', JSON.stringify(tplItem?.bindWorkflowCategory))
+  ok('模板默认交互方式为会话', tplItem?.mode === 'chat', JSON.stringify(tplItem?.mode))
   const tplTouched = await h.op('template.touch', { id: tplId })
   ok('template.touch 累加使用次数', tplTouched?.usageCount === 1, JSON.stringify(tplTouched))
   const tplUpdated = await h.op('template.save', {
@@ -444,6 +445,46 @@ try {
   ok('agent.run 支持图片输入', /测试提示词/.test(runImage?.prompt || ''), JSON.stringify(runImage))
   const imageCall = chatCalls[1]
   ok('图片以 image_url data URL 发送', /data:image\/png;base64/.test(JSON.stringify(imageCall?.body?.messages || [])), JSON.stringify(imageCall?.body?.messages)?.slice(0, 200))
+  const multiTurn = await h.op('agent.run', {
+    templateId: agentTplId,
+    messages: [
+      { role: 'user', text: '第一轮：雨夜街头' },
+      { role: 'assistant', text: '第一轮回复：霓虹街头人像' },
+      { role: 'user', text: '第二轮：改成白天' },
+    ],
+  })
+  ok('多轮 agent.run 返回提示词', /测试提示词/.test(multiTurn?.prompt || ''), JSON.stringify(multiTurn))
+  ok('多轮返回轮次数', multiTurn?.turns === 3, JSON.stringify(multiTurn?.turns))
+  const multiCall = chatCalls[chatCalls.length - 1]
+  const multiMsgs = multiCall?.body?.messages || []
+  ok(
+    '多轮请求按顺序带 system + 三轮对话',
+    multiMsgs.length === 4 &&
+      multiMsgs[0].role === 'system' &&
+      multiMsgs[1].role === 'user' &&
+      multiMsgs[2].role === 'assistant' &&
+      multiMsgs[3].role === 'user',
+    JSON.stringify(multiMsgs.map((m) => m.role)),
+  )
+  ok(
+    '多轮历史内容保留',
+    /第一轮：雨夜街头/.test(JSON.stringify(multiMsgs[1])) && /第一轮回复/.test(String(multiMsgs[2]?.content || '')),
+    JSON.stringify(multiMsgs[2])?.slice(0, 120),
+  )
+  let lastAssistantRejected = false
+  try {
+    await h.op('agent.run', {
+      templateId: agentTplId,
+      messages: [
+        { role: 'user', text: 'x' },
+        { role: 'assistant', text: 'y' },
+      ],
+    })
+  } catch (err) {
+    lastAssistantRejected = err.status === 400
+  }
+  ok('最后一条必须是用户消息', lastAssistantRejected)
+
   let agentNoInput = false
   try {
     await h.op('agent.run', { templateId: agentTplId, input: { text: '' } })
@@ -553,6 +594,28 @@ try {
     input: { text: '雨夜街头' },
   })
   ok('DSH 通道纯文字也成功', /DSH 生成/.test(dshTextRun?.prompt || ''), JSON.stringify(dshTextRun))
+  const dshMulti = await h.op('agent.run', {
+    templateId: dshAgentTplId,
+    messages: [
+      { role: 'user', text: '这是什么？' },
+      { role: 'assistant', text: '一个橙色圆形测试图。' },
+      { role: 'user', text: '照着它写提示词', imageBase64: tinyPng, imageMime: 'image/png' },
+    ],
+  })
+  ok('DSH 多轮会话成功', /DSH 生成/.test(dshMulti?.prompt || '') && dshMulti?.turns === 3, JSON.stringify(dshMulti))
+  const dshMultiMessages = dshCalls[dshCalls.length - 1]?.options?.messages || []
+  ok(
+    'DSH 多轮带上历史消息',
+    dshMultiMessages.length === 3 &&
+      dshMultiMessages[1]?.role === 'assistant' &&
+      /橙色圆形/.test(JSON.stringify(dshMultiMessages[1])),
+    JSON.stringify(dshMultiMessages.map((m) => m.role)),
+  )
+  ok(
+    'DSH 第二轮用户消息带图片块',
+    JSON.stringify(dshMultiMessages[2]?.content || []).includes('"type":"image"'),
+    JSON.stringify(dshMultiMessages[2]?.content)?.slice(0, 160),
+  )
   await h.op('settings.set', { agentDshModel: 'stub-text' })
   let textOnlyError = ''
   let textOnlyCode = ''

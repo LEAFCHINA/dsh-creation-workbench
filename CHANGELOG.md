@@ -2,6 +2,29 @@
 
 First public release: **1.2.2**.
 
+## 2.4.0 — ✨ Agent 临时会话
+
+- **Agent templates now open a temporary chat drawer** (right side, chat layout:
+  you on the right, the agent on the left). Follow-ups keep the conversation
+  context, so you can iterate on a prompt instead of re-running from scratch.
+- **Multi-turn `agent.run`**: the host accepts
+  `messages: [{role, text, imageBase64?, imageMime?}]`, keeps the last 16 turns
+  (≤ 40k chars) and still supports the legacy single-turn `input`. Images can be
+  attached to any user turn (DSH channel: one attachment per image; API channel:
+  `image_url` blocks).
+- **Insert into the composer**: 「整段送入」 per reply, or select text inside a
+  reply to insert just that fragment; the drawer closes and the composer keeps
+  the caret after the inserted text.
+- **Session controls**: clear, cancel a running request, retry the last turn,
+  copy a reply, per-reply elapsed time and character count.
+- **Templates get a 「交互方式」 field**: 临时会话 (default, chat drawer) or
+  快问快答 (inline one-shot panel, previous behaviour).
+- The `@` menu lists ✨ agent templates first and labels them
+  「✨ Agent · 会话」 / 「✨ Agent · 快问快答」.
+- Each session is stored per conversation + template in localStorage (text only,
+  max 20 turns, images are not persisted) and never written to workspace history.
+
+
 ## 2.3.5
 
 - **Fix: 「DSH 模型返回了空结果」on real photos.** Reasoning-capable models can

@@ -102,6 +102,7 @@ function normalizeStoredTemplate(item) {
     name,
     category,
     kind: item.kind === 'agent' ? 'agent' : 'text',
+    mode: item.mode === 'single' ? 'single' : 'chat',
     agent: normalizeAgent(item.agent),
     content,
     variables,
@@ -155,9 +156,10 @@ export async function listTemplates() {
   return { templates: templates.map(stripTemplate) }
 }
 
-export async function saveTemplate({ id, name, category, kind, agent, content, variables, bindWorkflowCategory, bindWorkflowId, tags } = {}) {
+export async function saveTemplate({ id, name, category, kind, mode, agent, content, variables, bindWorkflowCategory, bindWorkflowId, tags } = {}) {
   const cleanName = assertNonEmptyString(name, '模板名称', { max: 100 })
   const cleanKind = kind === 'agent' ? 'agent' : 'text'
+  const cleanMode = mode === 'single' ? 'single' : 'chat'
   if (cleanKind !== 'agent' && (typeof content !== 'string' || !content.trim())) {
     throw new ApiError('模板内容不能为空', 'INVALID_REQUEST', 400)
   }
@@ -195,6 +197,7 @@ export async function saveTemplate({ id, name, category, kind, agent, content, v
             : current.category || '通用',
         content: cleanContent,
         kind: cleanKind,
+        mode: cleanMode,
         agent: cleanAgent,
         variables: cleanVariables,
         ...bind,
@@ -219,6 +222,7 @@ export async function saveTemplate({ id, name, category, kind, agent, content, v
         typeof category === 'string' && category.trim() ? category.trim().slice(0, 40) : '通用',
       content: cleanContent,
       kind: cleanKind,
+      mode: cleanMode,
       agent: cleanAgent,
       variables: cleanVariables,
       ...bind,

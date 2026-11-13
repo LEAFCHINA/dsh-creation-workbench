@@ -15,6 +15,7 @@
         templates,
         onUseTemplate,
         onSaveAsTemplate,
+        onOpenAgentSession,
         refs,
         onRemoveRef,
         onAddFiles,
@@ -453,6 +454,17 @@
       const pickTemplate = (template) => {
         if (!template) return
         if (template.kind === 'agent') {
+          // v2.4: 会话模式的 Agent 模板打开右侧临时会话；快问快答走行内面板。
+          if (
+            template.mode !== 'single' &&
+            typeof onOpenAgentSession === 'function'
+          ) {
+            setAtMenu({ open: false, query: '', at: -1 })
+            setVarTemplate(null)
+            setAgentTemplate(null)
+            onOpenAgentSession(template)
+            return
+          }
           setAgentTemplate(template)
           setAgentAt(atMenu.at)
           setAgentInput('')
@@ -717,7 +729,13 @@
             ),
           )
         }
-        const list = filteredTemplates.slice(0, 8)
+        const agentFirst = filteredTemplates
+          .slice()
+          .sort((left, right) => {
+            const rank = (item) => (item.kind === 'agent' ? 0 : 1)
+            return rank(left) - rank(right)
+          })
+        const list = agentFirst.slice(0, 10)
         return h(
           'div',
           { className: 'iw-at-menu' },
@@ -725,7 +743,7 @@
             'div',
             { className: 'iw-at-head' },
             h(Icon, { name: 'spark', size: 12 }),
-            atMenu.query ? `模板：${atMenu.query}` : '插入提示词模板',
+            atMenu.query ? `模板：${atMenu.query}` : '选择模板（✨ Agent 模板优先）',
           ),
           list.length
             ? list.map((template, index) =>
@@ -741,7 +759,11 @@
                   h('span', { className: 'iw-at-name' }, str(template.name)),
                   h('span', { className: 'iw-at-cat' }, str(template.category)),
                   template.kind === 'agent'
-                    ? h('span', { className: 'iw-at-agent' }, '✨ Agent')
+                    ? h(
+                        'span',
+                        { className: 'iw-at-agent' },
+                        template.mode === 'single' ? '✨ Agent · 快问快答' : '✨ Agent · 会话',
+                      )
                     : template.variables.length
                     ? h('span', { className: 'iw-at-vars' }, `${template.variables.length} 个变量`)
                     : null,

@@ -392,6 +392,9 @@
         selected ? str(selected.bindWorkflowCategory) : '',
       )
       const [kind, setKind] = useState(() => (selected && selected.kind === 'agent' ? 'agent' : 'text'))
+      const [agentMode, setAgentMode] = useState(() =>
+        selected && selected.mode === 'single' ? 'single' : 'chat',
+      )
       const [agentSystem, setAgentSystem] = useState(() =>
         selected && isObj(selected.agent) ? str(selected.agent.systemPrompt) : '',
       )
@@ -439,6 +442,7 @@
         setContent(selected ? str(selected.content) : '')
         setBindCategory(selected ? str(selected.bindWorkflowCategory) : '')
         setKind(selected && selected.kind === 'agent' ? 'agent' : 'text')
+        setAgentMode(selected && selected.mode === 'single' ? 'single' : 'chat')
         setAgentSystem(selected && isObj(selected.agent) ? str(selected.agent.systemPrompt) : '')
         setAgentUser(selected && isObj(selected.agent) ? str(selected.agent.userTemplate) : '')
         setAgentFormat(
@@ -488,6 +492,7 @@
             category: str(category).trim() || '通用',
             content: str(content),
             kind,
+            mode: agentMode,
             agent: {
               inputTypes: [
                 agentInputs.text ? 'text' : '',
@@ -744,6 +749,30 @@
                 ),
                 h(
                   Field,
+                  { label: '交互方式' },
+                  h(
+                    'div',
+                    { className: 'iw-agent-mode-row' },
+                    h(Select, {
+                      className: 'iw-param-select',
+                      value: agentMode,
+                      options: [
+                        { value: 'chat', label: '临时会话（可多轮追问）' },
+                        { value: 'single', label: '快问快答（行内一问一得）' },
+                      ],
+                      onChange: (value) => setAgentMode(value),
+                    }),
+                    h(
+                      'span',
+                      { className: 'iw-agent-hint' },
+                      agentMode === 'chat'
+                        ? '选中后打开右侧临时会话：可连续追问，结果送入输入框'
+                        : '选中后在输入框上方弹出小面板：一问一得',
+                    ),
+                  ),
+                ),
+                h(
+                  Field,
                   { label: '输出格式' },
                   h(Select, {
                     className: 'iw-param-select',
@@ -865,6 +894,321 @@
       )
     }
 
+    /**
+     * v2.4.0: temporary agent session drawer.
+     *
+     * A chat-style side panel for ✨ Agent templates: the user speaks on the
+     * right, the agent answers on the left, follow-ups keep the context. The
+     * result is inserted into the composer (whole reply or a selection) and the
+     * drawer closes. Nothing here is written to the workspace history.
+     */
+    function AgentSession(props) {
+      const session = isObj(props.session) ? props.session : {}
+      const template = isObj(props.template) ? props.template : null
+      const messages = Array.isArray(session.messages) ? session.messages : []
+      const [text, setText] = useState('')
+      const [image, setImage] = useState(null)
+      const [selection, setSelection] = useState('')
+      const fileRef = useRef(null)
+      const bodyRef = useRef(null)
+      const agent = template && isObj(template.agent) ? template.agent : {}
+      const allowImage =
+        Array.isArray(agent.inputTypes) && agent.inputTypes.indexOf('image') >= 0
+      const busy = !!session.busy
+      const canSend = !busy && (!!str(text).trim() || !!image)
+
+      useEffect(() => {
+        const element = bodyRef.current
+        if (!element) return
+        element.scrollTop = element.scrollHeight
+      }, [messages.length, busy, session.error])
+
+      const pickFile = (file) => {
+        if (!file) return
+        if (!/^image\/(png|jpeg|webp)$/i.test(file.type || '')) {
+          props.onToast('error', '只支持 PNG / JPEG / WebP 图片')
+          return
+        }
+        if (file.size > 6 * 1024 * 1024) {
+          props.onToast('error', '图片过大（最多 6MB）')
+          return
+        }
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = String(reader.result || '')
+          const comma = dataUrl.indexOf(',')
+          const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : ''
+          if (!base64) {
+            props.onToast('error', '读取图片失败')
+            return
+          }
+          setImage({ dataUrl, base64, mime: file.type, name: file.name || 'image.png' })
+        }
+        reader.onerror = () => props.onToast('error', '读取图片失败')
+        reader.readAsDataURL(file)
+      }
+
+      const submit = () => {
+        if (!canSend) return
+        const payload = {
+          text: str(text).trim(),
+          imageBase64: image ? image.base64 : '',
+          imageMime: image ? image.mime : '',
+          imageDataUrl: image ? image.dataUrl : '',
+        }
+        setText('')
+        setImage(null)
+        setSelection('')
+        props.onSend(payload)
+      }
+
+      const captureSelection = () => {
+        try {
+          const selected = String(window.getSelection ? window.getSelection().toString() : '').trim()
+          setSelection(selected)
+        } catch (error) {
+          setSelection('')
+        }
+      }
+
+      return h(
+        'aside',
+        { className: 'iw-agent-drawer' },
+        h(
+          'div',
+          { className: 'iw-agent-drawer-head' },
+          h(Icon, { name: 'spark', size: 14 }),
+          h(
+            'div',
+            { className: 'iw-agent-drawer-title' },
+            h('span', { className: 'iw-agent-drawer-name' }, str(template && template.name) || 'Agent 会话'),
+            h('span', { className: 'iw-agent-drawer-badge' }, '临时会话'),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'iw-agent-drawer-x',
+              title: '关闭临时会话（不会清空已生成的提示词）',
+              onClick: props.onClose,
+            },
+            h(Icon, { name: 'x', size: 12 }),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'iw-agent-drawer-body', ref: bodyRef, onMouseUp: captureSelection },
+          messages.length === 0
+            ? h(
+                'div',
+                { className: 'iw-agent-empty' },
+                h(Icon, { name: 'spark', size: 20 }),
+                h('div', null, '把想法或图片发给 Agent，它会按模板规则生成提示词。'),
+                h('div', { className: 'iw-agent-empty-sub' }, '多轮追问会保留上下文；结果可直接送入输入框。'),
+              )
+            : messages.map((message, index) =>
+                message.role === 'user'
+                  ? h(
+                      'div',
+                      { key: message.id || index, className: 'iw-agent-msg iw-agent-msg-user' },
+                      message.imageDataUrl
+                        ? h('img', {
+                            className: 'iw-agent-msg-image',
+                            src: message.imageDataUrl,
+                            alt: '图片',
+                          })
+                        : null,
+                      message.text
+                        ? h('div', { className: 'iw-agent-bubble' }, message.text)
+                        : null,
+                    )
+                  : h(
+                      'div',
+                      { key: message.id || index, className: 'iw-agent-msg iw-agent-msg-bot' },
+                      h('div', { className: 'iw-agent-bubble' }, message.text),
+                      h(
+                        'div',
+                        { className: 'iw-agent-msg-actions' },
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'iw-agent-mini',
+                            onClick: () => props.onInsert(message.text),
+                          },
+                          '整段送入',
+                        ),
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'iw-agent-mini',
+                            onClick: () => props.onCopy(message.text),
+                          },
+                          '复制',
+                        ),
+                        message.elapsedMs
+                          ? h(
+                              'span',
+                              { className: 'iw-agent-msg-meta' },
+                              `${Math.round(message.elapsedMs / 1000)}s · ${message.text.length} 字`,
+                            )
+                          : null,
+                      ),
+                    ),
+              ),
+          busy
+            ? h(
+                'div',
+                { className: 'iw-agent-msg iw-agent-msg-bot' },
+                h(
+                  'div',
+                  { className: 'iw-agent-bubble iw-agent-typing' },
+                  h(Spinner, { size: 12 }),
+                  'Agent 正在思考…',
+                ),
+              )
+            : null,
+          session.error
+            ? h(
+                'div',
+                { className: 'iw-agent-error' },
+                h('span', null, str(session.error)),
+                h(
+                  'button',
+                  { type: 'button', className: 'iw-agent-mini', onClick: props.onRetry },
+                  '重试',
+                ),
+              )
+            : null,
+        ),
+        selection
+          ? h(
+              'div',
+              { className: 'iw-agent-selection' },
+              h('span', null, `已选中 ${selection.length} 字`),
+              h(
+                'button',
+                { type: 'button', className: 'iw-btn iw-btn-primary iw-btn-sm', onClick: () => props.onInsert(selection) },
+                '送入选中片段',
+              ),
+              h(
+                'button',
+                { type: 'button', className: 'iw-btn iw-btn-sm', onClick: () => setSelection('') },
+                '取消选择',
+              ),
+            )
+          : null,
+        h(
+          'div',
+          { className: 'iw-agent-compose' },
+          image
+            ? h(
+                'div',
+                { className: 'iw-agent-compose-image' },
+                h('img', { src: image.dataUrl, alt: '待发送图片' }),
+                h('span', { className: 'iw-agent-compose-name' }, image.name),
+                h(
+                  'button',
+                  { type: 'button', className: 'iw-agent-mini', onClick: () => setImage(null) },
+                  '移除',
+                ),
+              )
+            : null,
+          h('textarea', {
+            className: 'iw-input iw-agent-compose-input',
+            rows: 3,
+            value: text,
+            placeholder: messages.length
+              ? '继续追问，或换一个要求…（Enter 发送，Shift+Enter 换行）'
+              : '描述你的想法；也可以先放一张图片…',
+            onChange: (event) => setText(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key !== 'Enter') return
+              if (event.shiftKey) return
+              if (event.nativeEvent && event.nativeEvent.isComposing) return
+              if (event.isComposing) return
+              event.preventDefault()
+              submit()
+            },
+            onPaste: (event) => {
+              if (!allowImage) return
+              const clipboard = event.clipboardData
+              if (!clipboard) return
+              for (const item of Array.from(clipboard.items || [])) {
+                if (item.kind === 'file' && /^image\//.test(item.type || '')) {
+                  const file = item.getAsFile()
+                  if (file) {
+                    event.preventDefault()
+                    pickFile(file)
+                    return
+                  }
+                }
+              }
+            },
+          }),
+          h(
+            'div',
+            { className: 'iw-agent-compose-actions' },
+            allowImage
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn iw-btn-sm',
+                    disabled: busy,
+                    onClick: () => {
+                      if (fileRef.current) fileRef.current.click()
+                    },
+                  },
+                  '图片',
+                )
+              : null,
+            h('input', {
+              type: 'file',
+              accept: 'image/png,image/jpeg,image/webp',
+              ref: fileRef,
+              className: 'iw-agent-file',
+              onChange: (event) => {
+                const file = event.target.files && event.target.files[0]
+                pickFile(file)
+                event.target.value = ''
+              },
+            }),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'iw-btn iw-btn-sm',
+                disabled: busy || messages.length === 0,
+                title: '清空这段临时会话',
+                onClick: props.onClear,
+              },
+              '清空',
+            ),
+            h('div', { className: 'iw-agent-compose-spacer' }),
+            busy
+              ? h(
+                  'button',
+                  { type: 'button', className: 'iw-btn iw-btn-sm', onClick: props.onCancel },
+                  '取消本次',
+                )
+              : null,
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'iw-btn iw-btn-primary iw-btn-sm',
+                disabled: !canSend,
+                onClick: submit,
+              },
+              busy ? '生成中…' : '发送',
+            ),
+          ),
+        ),
+      )
+    }
+
     function Workbench() {
       // P2-02: lazier localStorage read — passing loadUiState() to useRef would
       // evaluate it on every render (a getItem + JSON.parse per keystroke).
@@ -895,6 +1239,10 @@
       const [templates, setTemplates] = useState([])
       const [templatesLoaded, setTemplatesLoaded] = useState(false)
       const [templateEdit, setTemplateEdit] = useState(null)
+      // v2.4: temporary agent session (drawer, not part of workspace history).
+      const [agentSession, setAgentSession] = useState(null)
+      const agentSessionRef = useRef(null)
+      const agentReqRef = useRef(0)
       // v2.1: sidebar activity tab; the main area follows it.
       const [activeTab, setActiveTab] = useState(() => {
         const storedTab = str(storedUiRef.current.activeTab)
@@ -988,6 +1336,9 @@
       useEffect(() => {
         jobsRef.current = jobs
       }, [jobs])
+      useEffect(() => {
+        agentSessionRef.current = agentSession
+      }, [agentSession])
       useEffect(() => {
         mountedRef.current = true
         const tokens = pollTokensRef.current
@@ -1976,6 +2327,197 @@
         }
       }
 
+      /* ---- v2.4: temporary agent session ---------------------------------- */
+
+      function agentStoreKey(convId, templateId) {
+        return 'dsh.creation-workbench.v1.agent.' + (convId || 'none') + '.' + templateId
+      }
+
+      function loadAgentMessages(convId, templateId) {
+        try {
+          const raw = window.localStorage.getItem(agentStoreKey(convId, templateId))
+          if (!raw) return []
+          const parsed = JSON.parse(raw)
+          if (!Array.isArray(parsed)) return []
+          return parsed
+            .filter((item) => isObj(item) && (item.role === 'user' || item.role === 'assistant'))
+            .map((item) => ({
+              id: str(item.id),
+              role: item.role,
+              text: str(item.text),
+              elapsedMs: num(item.elapsedMs, 0),
+            }))
+            .slice(-20)
+        } catch (error) {
+          return []
+        }
+      }
+
+      function persistAgentMessages(convId, templateId, messages) {
+        try {
+          const slim = (Array.isArray(messages) ? messages : [])
+            .map((item) => ({
+              id: str(item.id),
+              role: item.role === 'assistant' ? 'assistant' : 'user',
+              text: str(item.text).slice(0, 8000),
+              elapsedMs: num(item.elapsedMs, 0),
+            }))
+            .slice(-20)
+          window.localStorage.setItem(agentStoreKey(convId, templateId), JSON.stringify(slim))
+        } catch (error) {
+          // storage may be full/unavailable — the session still works in memory
+        }
+      }
+
+      function openAgentSession(template) {
+        if (!isObj(template) || !str(template.id)) return
+        const convId = activeConvRef.current || ''
+        if (!convId) {
+          pushToast('info', '先在工作区选一个会话，再使用 Agent 会话')
+          return
+        }
+        setAgentSession({
+          templateId: str(template.id),
+          name: str(template.name) || 'Agent 会话',
+          messages: loadAgentMessages(convId, template.id),
+          busy: false,
+          error: '',
+        })
+      }
+
+      async function sendAgentMessage(payload) {
+        const session = agentSessionRef.current
+        if (!session || session.busy) return
+        const convId = activeConvRef.current || ''
+        const templateId = session.templateId
+        const input = isObj(payload) ? payload : {}
+        const text = str(input.text).trim()
+        const imageBase64 = str(input.imageBase64)
+        if (!text && !imageBase64) return
+        const userMessage = {
+          id: uid('agm_'),
+          role: 'user',
+          text,
+          imageDataUrl: str(input.imageDataUrl),
+        }
+        const history = [...session.messages, userMessage]
+        const token = agentReqRef.current + 1
+        agentReqRef.current = token
+        setAgentSession({ ...session, messages: history, busy: true, error: '' })
+        persistAgentMessages(convId, templateId, history)
+        const apiMessages = history.map((item) => ({
+          role: item.role === 'assistant' ? 'assistant' : 'user',
+          text: str(item.text),
+          ...(item === userMessage && imageBase64
+            ? { imageBase64, imageMime: str(input.imageMime) || 'image/png' }
+            : {}),
+        }))
+        try {
+          const data = await rpc('agent.run', { templateId, messages: apiMessages })
+          if (agentReqRef.current !== token) return
+          const reply = {
+            id: uid('agm_'),
+            role: 'assistant',
+            text: str(data && data.prompt),
+            elapsedMs: num(data && data.elapsedMs, 0),
+          }
+          const nextMessages = [...history, reply]
+          setAgentSession({ ...session, messages: nextMessages, busy: false, error: '' })
+          persistAgentMessages(convId, templateId, nextMessages)
+          handleUseTemplate(templateId)
+        } catch (error) {
+          if (agentReqRef.current !== token) return
+          setAgentSession({
+            ...session,
+            messages: history,
+            busy: false,
+            error: '生成失败：' + ((error && error.message) || String(error)),
+          })
+        }
+      }
+
+      async function retryAgentMessage() {
+        const session = agentSessionRef.current
+        if (!session || session.busy) return
+        const messages = Array.isArray(session.messages) ? session.messages : []
+        let lastUserIndex = -1
+        for (let index = messages.length - 1; index >= 0; index -= 1) {
+          if (messages[index].role === 'user') {
+            lastUserIndex = index
+            break
+          }
+        }
+        if (lastUserIndex < 0) return
+        const lastUser = messages[lastUserIndex]
+        const history = messages.slice(0, lastUserIndex)
+        const convId = activeConvRef.current || ''
+        setAgentSession({ ...session, messages: history, busy: false, error: '' })
+        persistAgentMessages(convId, session.templateId, history)
+        await sendAgentMessage({ text: lastUser.text })
+      }
+
+      function cancelAgentSession() {
+        agentReqRef.current += 1
+        const session = agentSessionRef.current
+        if (!session) return
+        setAgentSession({ ...session, busy: false, error: '已取消本次生成' })
+      }
+
+      function clearAgentSession() {
+        const session = agentSessionRef.current
+        if (!session) return
+        const convId = activeConvRef.current || ''
+        setAgentSession({ ...session, messages: [], busy: false, error: '' })
+        persistAgentMessages(convId, session.templateId, [])
+      }
+
+      async function copyAgentText(value) {
+        const text = str(value)
+        if (!text) return
+        try {
+          await copyText(text)
+          pushToast('success', '已复制')
+        } catch (error) {
+          pushToast('error', '复制失败')
+        }
+      }
+
+      /**
+       * Insert agent output into the composer at the cursor. The drawer closes so
+       * the user can review/edit before sending (per the agreed flow).
+       */
+      function insertFromAgent(value) {
+        const text = str(value)
+        if (!text) return
+        if (activeTab !== 'workspace') setActiveTab('workspace')
+        const element = textareaRef.current
+        const current = str(promptRef.current)
+        let start = current.length
+        let end = current.length
+        if (element && typeof element.selectionStart === 'number') {
+          start = Math.min(element.selectionStart, current.length)
+          end = Math.min(element.selectionEnd, current.length)
+        }
+        const prefix = current.slice(0, start)
+        const suffix = current.slice(end)
+        const separator = prefix && !/\n$/.test(prefix) ? '\n' : ''
+        const next = prefix + separator + text + suffix
+        setPrompt(next)
+        setAgentSession(null)
+        setTimeout(() => {
+          const area = textareaRef.current
+          if (area && typeof area.focus === 'function') {
+            area.focus()
+            const position = (prefix + separator + text).length
+            try {
+              area.setSelectionRange(position, position)
+            } catch {
+              // ignore
+            }
+          }
+        }, 60)
+      }
+
       /** v2.2: template tab + composer integration. */
       function handleSelectTemplate(id) {
         const found = (templates || []).find((template) => template.id === id) || null
@@ -2794,6 +3336,7 @@
                     templates,
                     onUseTemplate: handleUseTemplate,
                     onSaveAsTemplate: handleSaveAsTemplate,
+                    onOpenAgentSession: openAgentSession,
                   }),
                   ),
                   activeTab === 'workflows'
@@ -2913,6 +3456,23 @@
               pushToast,
               onClose: () => setMaskEditor(null),
               onSubmit: handleInpaintSubmit,
+            })
+          : null,
+        agentSession && boot.status === 'ready'
+          ? h(AgentSession, {
+              session: agentSession,
+              template:
+                (templates || []).find((item) => item.id === agentSession.templateId) || {
+                  name: agentSession.name,
+                },
+              onSend: sendAgentMessage,
+              onCancel: cancelAgentSession,
+              onClear: clearAgentSession,
+              onRetry: retryAgentMessage,
+              onClose: () => setAgentSession(null),
+              onInsert: insertFromAgent,
+              onCopy: copyAgentText,
+              onToast: pushToast,
             })
           : null,
         taskPanelOpen && boot.status === 'ready'
