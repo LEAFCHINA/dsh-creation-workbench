@@ -30,7 +30,30 @@ const MAX_IMAGE_BASE64 = 8 * 1024 * 1024
  */
 const AGENT_SESSION_ID = `cwb-${randomUUID()}`
 
-const DSH_SERVICE_KEYS = ['llm', 'languageModel', 'model', 'models', 'chat', 'agent', 'ai']
+const DSH_SERVICE_KEYS = [
+  'llm',
+  'languageModel',
+  'model',
+  'models',
+  'chat',
+  'agent',
+  'ai',
+  // v2.7.1: host workspace / session surface (for linking agent chats to real DSH sessions)
+  'workspace',
+  'workspaces',
+  'session',
+  'sessions',
+  'conversation',
+  'conversations',
+  'runner',
+  'runners',
+  'webServer',
+  'client',
+  'frontend',
+  'ui',
+  'events',
+  'loader',
+]
 
 /** Collect callable method names across the prototype chain (class instances). */
 function serviceMethods(service) {
@@ -78,8 +101,38 @@ export async function probeAgent(ctx) {
   } catch {
     // probing is best effort
   }
+  const inventory = []
+  try {
+    if (ctx && typeof ctx === 'object') {
+      const keys = new Set()
+      let proto = ctx
+      for (let depth = 0; proto && depth < 5; depth += 1) {
+        for (const name of Object.getOwnPropertyNames(proto)) {
+          if (name === 'constructor') continue
+          if (/^[a-z][A-Za-z0-9_]*$/.test(name)) keys.add(name)
+        }
+        proto = Object.getPrototypeOf(proto)
+      }
+      for (const name of [...keys].sort()) {
+        let value = null
+        try {
+          value = typeof ctx.get === 'function' ? ctx.get(name) : ctx[name]
+        } catch {
+          value = null
+        }
+        if (!value || typeof value !== 'object') continue
+        const methods = serviceMethods(value)
+        if (!methods.length) continue
+        inventory.push({ key: name, methods: methods.slice(0, 16) })
+        if (inventory.length >= 40) break
+      }
+    }
+  } catch {
+    // inventory is best effort
+  }
   return {
     available,
+    inventory,
     ctxType,
     supported: false,
     hint: available.length
