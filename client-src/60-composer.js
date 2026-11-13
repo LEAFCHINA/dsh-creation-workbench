@@ -41,6 +41,15 @@
       const [atIndex, setAtIndex] = useState(0)
       const [varTemplate, setVarTemplate] = useState(null)
       const [varValues, setVarValues] = useState({})
+      // v2.3: ✨ agent template mode.
+      const [agentTemplate, setAgentTemplate] = useState(null)
+      const [agentAt, setAgentAt] = useState(-1)
+      const [agentInput, setAgentInput] = useState('')
+      const [agentImage, setAgentImage] = useState(null)
+      const [agentBusy, setAgentBusy] = useState(false)
+      const [agentResult, setAgentResult] = useState('')
+      const [agentError, setAgentError] = useState('')
+      const agentFileRef = useRef(null)
       const filteredTemplates = atMenu.open
         ? templateList.filter((template) => {
             const query = str(atMenu.query).toLowerCase()
@@ -443,6 +452,17 @@
 
       const pickTemplate = (template) => {
         if (!template) return
+        if (template.kind === 'agent') {
+          setAgentTemplate(template)
+          setAgentAt(atMenu.at)
+          setAgentInput('')
+          setAgentImage(null)
+          setAgentResult('')
+          setAgentError('')
+          setAtMenu({ open: false, query: '', at: -1 })
+          setVarTemplate(null)
+          return
+        }
         if (Array.isArray(template.variables) && template.variables.length) {
           setVarTemplate(template)
           setVarValues(templateVariableDefaults(template))
@@ -464,6 +484,198 @@
           setAtMenu({ open: false, query: '', at: -1 })
           setVarTemplate(null)
         }
+      }
+
+      const allowAgentText = !!(
+        agentTemplate &&
+        agentTemplate.agent &&
+        Array.isArray(agentTemplate.agent.inputTypes) &&
+        agentTemplate.agent.inputTypes.indexOf('text') >= 0
+      )
+      const allowAgentImage = !!(
+        agentTemplate &&
+        agentTemplate.agent &&
+        Array.isArray(agentTemplate.agent.inputTypes) &&
+        agentTemplate.agent.inputTypes.indexOf('image') >= 0
+      )
+      const canRunAgent = !!agentTemplate && ((allowAgentText && str(agentInput).trim()) || (allowAgentImage && agentImage))
+
+      const setAgentImageFromFile = (file) => {
+        if (!file) return
+        if (!/^image\/(png|jpeg|webp)$/i.test(file.type || '')) {
+          setAgentError('只支持 PNG / JPEG / WebP 图片')
+          return
+        }
+        if (file.size > 6 * 1024 * 1024) {
+          setAgentError('图片过大（最多 6MB）')
+          return
+        }
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = String(reader.result || '')
+          const comma = dataUrl.indexOf(',')
+          const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : ''
+          if (!base64) {
+            setAgentError('读取图片失败')
+            return
+          }
+          setAgentImage({ dataUrl, base64, mime: file.type, name: file.name || 'image.png' })
+          setAgentError('')
+        }
+        reader.onerror = () => setAgentError('读取图片失败')
+        reader.readAsDataURL(file)
+      }
+      const runAgentTemplate = async () => {
+        if (!agentTemplate || agentBusy) return
+        if (!canRunAgent) {
+          setAgentError('请输入文字或选择一张图片')
+          return
+        }
+        setAgentBusy(true)
+        setAgentError('')
+        try {
+          const input = {}
+          if (allowAgentText) input.text = str(agentInput)
+          if (allowAgentImage && agentImage) {
+            input.imageBase64 = agentImage.base64
+            input.imageMime = agentImage.mime
+          }
+          const data = await rpc('agent.run', { templateId: agentTemplate.id, input })
+          setAgentResult(str(data && data.prompt))
+          if (typeof onUseTemplate === 'function') onUseTemplate(agentTemplate.id)
+        } catch (failure) {
+          setAgentError((failure && failure.message) || String(failure))
+        } finally {
+          setAgentBusy(false)
+        }
+      }
+      const exitAgent = () => {
+        setAgentTemplate(null)
+        setAgentAt(-1)
+        setAgentInput('')
+        setAgentImage(null)
+        setAgentResult('')
+        setAgentError('')
+      }
+      const insertAgentResult = () => {
+        if (!agentResult) return
+        const current = str(prompt)
+        const at = agentAt >= 0 ? agentAt : current.length
+        onPromptChange(current.slice(0, at) + str(agentResult))
+        exitAgent()
+        setTimeout(() => {
+          const element = textareaRef.current
+          if (element && typeof element.focus === 'function') element.focus()
+        }, 30)
+      }
+
+      const renderAgentPanel = () => {
+        if (!agentTemplate) return null
+        const agent = isObj(agentTemplate.agent) ? agentTemplate.agent : {}
+        return h(
+          'div',
+          { className: 'iw-agent-panel' },
+          h(
+            'div',
+            { className: 'iw-agent-head' },
+            h(Icon, { name: 'spark', size: 13 }),
+            h('span', { className: 'iw-agent-name' }, str(agentTemplate.name)),
+            h('span', { className: 'iw-agent-kind' }, 'Agent 模板'),
+            h(
+              'button',
+              { type: 'button', className: 'iw-agent-x', title: '退出 Agent 模式', onClick: exitAgent },
+              h(Icon, { name: 'x', size: 11 }),
+            ),
+          ),
+          allowAgentText
+            ? h('textarea', {
+                className: 'iw-input iw-agent-text',
+                rows: 3,
+                value: agentInput,
+                placeholder: '描述你的想法，例如：一张雨夜霓虹街头的人像…',
+                onChange: (event) => setAgentInput(event.target.value),
+              })
+            : null,
+          allowAgentImage
+            ? h(
+                'div',
+                { className: 'iw-agent-image-row' },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn iw-btn-sm',
+                    onClick: () => {
+                      if (agentFileRef.current) agentFileRef.current.click()
+                    },
+                  },
+                  '选择图片',
+                ),
+                agentImage
+                  ? h('span', { className: 'iw-agent-image-name' }, agentImage.name)
+                  : h('span', { className: 'iw-agent-hint' }, '或直接粘贴图片（反推提示词）'),
+                agentImage
+                  ? h(
+                      'button',
+                      { type: 'button', className: 'iw-btn iw-btn-sm', onClick: () => setAgentImage(null) },
+                      '移除',
+                    )
+                  : null,
+                h('input', {
+                  type: 'file',
+                  accept: 'image/png,image/jpeg,image/webp',
+                  ref: agentFileRef,
+                  className: 'iw-agent-file',
+                  onChange: (event) => {
+                    const file = event.target.files && event.target.files[0]
+                    setAgentImageFromFile(file)
+                    event.target.value = ''
+                  },
+                }),
+              )
+            : null,
+          str(agent.outputFormat) === 'prompt_negative'
+            ? h('div', { className: 'iw-agent-hint' }, '输出会包含正向提示词与负面词，确认后插入输入框。')
+            : null,
+          agentError ? h('div', { className: 'iw-agent-error' }, agentError) : null,
+          agentResult
+            ? h(
+                'div',
+                { className: 'iw-agent-result' },
+                h('div', { className: 'iw-agent-result-label' }, 'Agent 结果（可编辑后插入）'),
+                h('textarea', {
+                  className: 'iw-input iw-agent-result-text',
+                  rows: 5,
+                  value: agentResult,
+                  onChange: (event) => setAgentResult(event.target.value),
+                }),
+              )
+            : null,
+          h(
+            'div',
+            { className: 'iw-agent-actions' },
+            h('button', { type: 'button', className: 'iw-btn', onClick: exitAgent }, '取消'),
+            agentResult
+              ? h('button', { type: 'button', className: 'iw-btn iw-btn-primary', onClick: insertAgentResult }, '确认插入')
+              : h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn iw-btn-primary',
+                    disabled: agentBusy || !canRunAgent,
+                    onClick: () => void runAgentTemplate(),
+                  },
+                  agentBusy ? '生成中…' : '生成提示词',
+                ),
+            agentResult
+              ? h(
+                  'button',
+                  { type: 'button', className: 'iw-btn', disabled: agentBusy, onClick: () => void runAgentTemplate() },
+                  '重新生成',
+                )
+              : null,
+          ),
+        )
       }
 
       const renderAtMenu = () => {
@@ -528,7 +740,9 @@
                   },
                   h('span', { className: 'iw-at-name' }, str(template.name)),
                   h('span', { className: 'iw-at-cat' }, str(template.category)),
-                  template.variables.length
+                  template.kind === 'agent'
+                    ? h('span', { className: 'iw-at-agent' }, '✨ Agent')
+                    : template.variables.length
                     ? h('span', { className: 'iw-at-vars' }, `${template.variables.length} 个变量`)
                     : null,
                 ),
@@ -605,6 +819,11 @@
         }
         if (files.length) {
           event.preventDefault()
+          // v2.3: while an agent template is active, paste fills its image input.
+          if (agentTemplate && allowAgentImage) {
+            setAgentImageFromFile(files[0])
+            return
+          }
           // v1.2: ComfyUI workflows do not accept reference images (v1 scope).
           if (comfy) {
             if (onToast) onToast('info', 'ComfyUI 工作流模式暂不支持参考图')
@@ -635,8 +854,8 @@
           { className: 'iw-composer-wrap' },
           h(
             'div',
-            { className: cx('iw-composer', focused && 'focused'), ref: composerRef },
-            atMenu.open ? renderAtMenu() : null,
+            { className: cx('iw-composer', focused && 'focused', agentTemplate && 'iw-agent-mode'), ref: composerRef },
+            agentTemplate ? renderAgentPanel() : atMenu.open ? renderAtMenu() : null,
             refList.length
               ? h(
                   'div',

@@ -793,6 +793,12 @@
         saveDir: str(source.saveDir),
         // v1.2: local ComfyUI service address ('' = not configured).
         comfyBaseUrl: str(source.comfyBaseUrl),
+        // v2.3: Agent (LLM) channel for ✨ templates.
+        agentSource: source.agentSource === 'dsh' ? 'dsh' : 'api',
+        agentBaseUrl: str(source.agentBaseUrl),
+        agentApiKeySet: !!source.agentApiKeySet,
+        agentApiKeyHint: str(source.agentApiKeyHint),
+        agentModel: str(source.agentModel),
         modelCosts: normalizeModelCosts(source.modelCosts),
         envFallback: !!source.envFallback,
       }
@@ -861,6 +867,8 @@
         id: str(source.id),
         name: str(source.name) || '未命名模板',
         category: str(source.category) || '通用',
+        kind: source.kind === 'agent' ? 'agent' : 'text',
+        agent: normalizeAgentConfig(source.agent),
         content,
         variables: Array.isArray(source.variables)
           ? source.variables
@@ -877,6 +885,20 @@
         usageCount: num(source.usageCount, 0),
         createdAt: str(source.createdAt),
         updatedAt: str(source.updatedAt),
+      }
+    }
+
+    function normalizeAgentConfig(raw) {
+      const source = isObj(raw) ? raw : {}
+      const inputTypes = Array.isArray(source.inputTypes)
+        ? source.inputTypes.filter((type) => type === 'text' || type === 'image')
+        : ['text', 'image']
+      return {
+        inputTypes: inputTypes.length ? inputTypes : ['text', 'image'],
+        systemPrompt: str(source.systemPrompt),
+        userTemplate: str(source.userTemplate),
+        outputFormat: source.outputFormat === 'prompt_negative' ? 'prompt_negative' : 'prompt',
+        model: str(source.model),
       }
     }
 

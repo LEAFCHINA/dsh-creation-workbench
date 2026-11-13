@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-30'
+    const BUILD = '2026-11-13-client-m2-31'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -699,6 +699,36 @@ window.__ModuleLoader__.load({
 .iw-template-preview-label{font-size:10.5px;color:var(--dsw-alias-label-secondary)}
 .iw-template-preview-body{font-size:12.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
 .iw-template-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* v2.3: agent templates */
+.iw-at-agent{font-size:10px;color:var(--dsw-alias-brand-primary)}
+.iw-composer.iw-agent-mode{border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 62%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--dsw-alias-brand-primary) 18%,transparent)}
+.iw-agent-panel{position:absolute;left:12px;right:12px;bottom:calc(100% + 8px);z-index:45;display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent);border-radius:12px;background:var(--dsw-alias-bg-layer-1);box-shadow:0 12px 32px rgba(0,0,0,.3);max-height:70vh;overflow:auto}
+.iw-agent-head{display:flex;align-items:center;gap:6px;font-size:12px}
+.iw-agent-name{font-weight:600}
+.iw-agent-kind{font-size:10px;color:var(--dsw-alias-brand-primary);border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 40%,transparent);border-radius:999px;padding:0 6px}
+.iw-agent-x{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}
+.iw-agent-x:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
+.iw-agent-text{min-height:64px;font-size:12.5px;resize:vertical}
+.iw-agent-image-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.iw-agent-image-name{font-size:11.5px;color:var(--dsw-alias-label-secondary)}
+.iw-agent-hint{font-size:11px;color:var(--dsw-alias-label-secondary)}
+.iw-agent-file{display:none}
+.iw-agent-error{font-size:11.5px;color:var(--dsw-alias-state-error-primary)}
+.iw-agent-result{display:flex;flex-direction:column;gap:4px}
+.iw-agent-result-label{font-size:10.5px;color:var(--dsw-alias-label-secondary)}
+.iw-agent-result-text{min-height:90px;font-size:12.5px;resize:vertical}
+.iw-agent-actions{display:flex;gap:8px;justify-content:flex-end}
+.iw-agent-settings{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px dashed var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
+.iw-agent-settings-head{display:flex;flex-direction:column;gap:2px}
+.iw-agent-settings-title{font-size:12.5px;font-weight:600}
+.iw-agent-settings-sub{font-size:11px;color:var(--dsw-alias-label-secondary)}
+.iw-agent-settings-grid{display:flex;flex-wrap:wrap;gap:8px}
+.iw-agent-settings-grid .iw-input{flex:1 1 220px}
+.iw-agent-settings-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.iw-agent-settings-msg{font-size:11px;color:var(--dsw-alias-label-secondary)}
+.iw-agent-inputs{display:flex;gap:14px;font-size:12px}
+.iw-agent-inputs label{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
 
 `
 /* ===== 10-helpers.js ===== */
@@ -1497,6 +1527,12 @@ window.__ModuleLoader__.load({
         saveDir: str(source.saveDir),
         // v1.2: local ComfyUI service address ('' = not configured).
         comfyBaseUrl: str(source.comfyBaseUrl),
+        // v2.3: Agent (LLM) channel for ✨ templates.
+        agentSource: source.agentSource === 'dsh' ? 'dsh' : 'api',
+        agentBaseUrl: str(source.agentBaseUrl),
+        agentApiKeySet: !!source.agentApiKeySet,
+        agentApiKeyHint: str(source.agentApiKeyHint),
+        agentModel: str(source.agentModel),
         modelCosts: normalizeModelCosts(source.modelCosts),
         envFallback: !!source.envFallback,
       }
@@ -1565,6 +1601,8 @@ window.__ModuleLoader__.load({
         id: str(source.id),
         name: str(source.name) || '未命名模板',
         category: str(source.category) || '通用',
+        kind: source.kind === 'agent' ? 'agent' : 'text',
+        agent: normalizeAgentConfig(source.agent),
         content,
         variables: Array.isArray(source.variables)
           ? source.variables
@@ -1581,6 +1619,20 @@ window.__ModuleLoader__.load({
         usageCount: num(source.usageCount, 0),
         createdAt: str(source.createdAt),
         updatedAt: str(source.updatedAt),
+      }
+    }
+
+    function normalizeAgentConfig(raw) {
+      const source = isObj(raw) ? raw : {}
+      const inputTypes = Array.isArray(source.inputTypes)
+        ? source.inputTypes.filter((type) => type === 'text' || type === 'image')
+        : ['text', 'image']
+      return {
+        inputTypes: inputTypes.length ? inputTypes : ['text', 'image'],
+        systemPrompt: str(source.systemPrompt),
+        userTemplate: str(source.userTemplate),
+        outputFormat: source.outputFormat === 'prompt_negative' ? 'prompt_negative' : 'prompt',
+        model: str(source.model),
       }
     }
 
@@ -3914,6 +3966,15 @@ window.__ModuleLoader__.load({
       const [atIndex, setAtIndex] = useState(0)
       const [varTemplate, setVarTemplate] = useState(null)
       const [varValues, setVarValues] = useState({})
+      // v2.3: ✨ agent template mode.
+      const [agentTemplate, setAgentTemplate] = useState(null)
+      const [agentAt, setAgentAt] = useState(-1)
+      const [agentInput, setAgentInput] = useState('')
+      const [agentImage, setAgentImage] = useState(null)
+      const [agentBusy, setAgentBusy] = useState(false)
+      const [agentResult, setAgentResult] = useState('')
+      const [agentError, setAgentError] = useState('')
+      const agentFileRef = useRef(null)
       const filteredTemplates = atMenu.open
         ? templateList.filter((template) => {
             const query = str(atMenu.query).toLowerCase()
@@ -4316,6 +4377,17 @@ window.__ModuleLoader__.load({
 
       const pickTemplate = (template) => {
         if (!template) return
+        if (template.kind === 'agent') {
+          setAgentTemplate(template)
+          setAgentAt(atMenu.at)
+          setAgentInput('')
+          setAgentImage(null)
+          setAgentResult('')
+          setAgentError('')
+          setAtMenu({ open: false, query: '', at: -1 })
+          setVarTemplate(null)
+          return
+        }
         if (Array.isArray(template.variables) && template.variables.length) {
           setVarTemplate(template)
           setVarValues(templateVariableDefaults(template))
@@ -4337,6 +4409,198 @@ window.__ModuleLoader__.load({
           setAtMenu({ open: false, query: '', at: -1 })
           setVarTemplate(null)
         }
+      }
+
+      const allowAgentText = !!(
+        agentTemplate &&
+        agentTemplate.agent &&
+        Array.isArray(agentTemplate.agent.inputTypes) &&
+        agentTemplate.agent.inputTypes.indexOf('text') >= 0
+      )
+      const allowAgentImage = !!(
+        agentTemplate &&
+        agentTemplate.agent &&
+        Array.isArray(agentTemplate.agent.inputTypes) &&
+        agentTemplate.agent.inputTypes.indexOf('image') >= 0
+      )
+      const canRunAgent = !!agentTemplate && ((allowAgentText && str(agentInput).trim()) || (allowAgentImage && agentImage))
+
+      const setAgentImageFromFile = (file) => {
+        if (!file) return
+        if (!/^image\/(png|jpeg|webp)$/i.test(file.type || '')) {
+          setAgentError('只支持 PNG / JPEG / WebP 图片')
+          return
+        }
+        if (file.size > 6 * 1024 * 1024) {
+          setAgentError('图片过大（最多 6MB）')
+          return
+        }
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = String(reader.result || '')
+          const comma = dataUrl.indexOf(',')
+          const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : ''
+          if (!base64) {
+            setAgentError('读取图片失败')
+            return
+          }
+          setAgentImage({ dataUrl, base64, mime: file.type, name: file.name || 'image.png' })
+          setAgentError('')
+        }
+        reader.onerror = () => setAgentError('读取图片失败')
+        reader.readAsDataURL(file)
+      }
+      const runAgentTemplate = async () => {
+        if (!agentTemplate || agentBusy) return
+        if (!canRunAgent) {
+          setAgentError('请输入文字或选择一张图片')
+          return
+        }
+        setAgentBusy(true)
+        setAgentError('')
+        try {
+          const input = {}
+          if (allowAgentText) input.text = str(agentInput)
+          if (allowAgentImage && agentImage) {
+            input.imageBase64 = agentImage.base64
+            input.imageMime = agentImage.mime
+          }
+          const data = await rpc('agent.run', { templateId: agentTemplate.id, input })
+          setAgentResult(str(data && data.prompt))
+          if (typeof onUseTemplate === 'function') onUseTemplate(agentTemplate.id)
+        } catch (failure) {
+          setAgentError((failure && failure.message) || String(failure))
+        } finally {
+          setAgentBusy(false)
+        }
+      }
+      const exitAgent = () => {
+        setAgentTemplate(null)
+        setAgentAt(-1)
+        setAgentInput('')
+        setAgentImage(null)
+        setAgentResult('')
+        setAgentError('')
+      }
+      const insertAgentResult = () => {
+        if (!agentResult) return
+        const current = str(prompt)
+        const at = agentAt >= 0 ? agentAt : current.length
+        onPromptChange(current.slice(0, at) + str(agentResult))
+        exitAgent()
+        setTimeout(() => {
+          const element = textareaRef.current
+          if (element && typeof element.focus === 'function') element.focus()
+        }, 30)
+      }
+
+      const renderAgentPanel = () => {
+        if (!agentTemplate) return null
+        const agent = isObj(agentTemplate.agent) ? agentTemplate.agent : {}
+        return h(
+          'div',
+          { className: 'iw-agent-panel' },
+          h(
+            'div',
+            { className: 'iw-agent-head' },
+            h(Icon, { name: 'spark', size: 13 }),
+            h('span', { className: 'iw-agent-name' }, str(agentTemplate.name)),
+            h('span', { className: 'iw-agent-kind' }, 'Agent 模板'),
+            h(
+              'button',
+              { type: 'button', className: 'iw-agent-x', title: '退出 Agent 模式', onClick: exitAgent },
+              h(Icon, { name: 'x', size: 11 }),
+            ),
+          ),
+          allowAgentText
+            ? h('textarea', {
+                className: 'iw-input iw-agent-text',
+                rows: 3,
+                value: agentInput,
+                placeholder: '描述你的想法，例如：一张雨夜霓虹街头的人像…',
+                onChange: (event) => setAgentInput(event.target.value),
+              })
+            : null,
+          allowAgentImage
+            ? h(
+                'div',
+                { className: 'iw-agent-image-row' },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn iw-btn-sm',
+                    onClick: () => {
+                      if (agentFileRef.current) agentFileRef.current.click()
+                    },
+                  },
+                  '选择图片',
+                ),
+                agentImage
+                  ? h('span', { className: 'iw-agent-image-name' }, agentImage.name)
+                  : h('span', { className: 'iw-agent-hint' }, '或直接粘贴图片（反推提示词）'),
+                agentImage
+                  ? h(
+                      'button',
+                      { type: 'button', className: 'iw-btn iw-btn-sm', onClick: () => setAgentImage(null) },
+                      '移除',
+                    )
+                  : null,
+                h('input', {
+                  type: 'file',
+                  accept: 'image/png,image/jpeg,image/webp',
+                  ref: agentFileRef,
+                  className: 'iw-agent-file',
+                  onChange: (event) => {
+                    const file = event.target.files && event.target.files[0]
+                    setAgentImageFromFile(file)
+                    event.target.value = ''
+                  },
+                }),
+              )
+            : null,
+          str(agent.outputFormat) === 'prompt_negative'
+            ? h('div', { className: 'iw-agent-hint' }, '输出会包含正向提示词与负面词，确认后插入输入框。')
+            : null,
+          agentError ? h('div', { className: 'iw-agent-error' }, agentError) : null,
+          agentResult
+            ? h(
+                'div',
+                { className: 'iw-agent-result' },
+                h('div', { className: 'iw-agent-result-label' }, 'Agent 结果（可编辑后插入）'),
+                h('textarea', {
+                  className: 'iw-input iw-agent-result-text',
+                  rows: 5,
+                  value: agentResult,
+                  onChange: (event) => setAgentResult(event.target.value),
+                }),
+              )
+            : null,
+          h(
+            'div',
+            { className: 'iw-agent-actions' },
+            h('button', { type: 'button', className: 'iw-btn', onClick: exitAgent }, '取消'),
+            agentResult
+              ? h('button', { type: 'button', className: 'iw-btn iw-btn-primary', onClick: insertAgentResult }, '确认插入')
+              : h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'iw-btn iw-btn-primary',
+                    disabled: agentBusy || !canRunAgent,
+                    onClick: () => void runAgentTemplate(),
+                  },
+                  agentBusy ? '生成中…' : '生成提示词',
+                ),
+            agentResult
+              ? h(
+                  'button',
+                  { type: 'button', className: 'iw-btn', disabled: agentBusy, onClick: () => void runAgentTemplate() },
+                  '重新生成',
+                )
+              : null,
+          ),
+        )
       }
 
       const renderAtMenu = () => {
@@ -4401,7 +4665,9 @@ window.__ModuleLoader__.load({
                   },
                   h('span', { className: 'iw-at-name' }, str(template.name)),
                   h('span', { className: 'iw-at-cat' }, str(template.category)),
-                  template.variables.length
+                  template.kind === 'agent'
+                    ? h('span', { className: 'iw-at-agent' }, '✨ Agent')
+                    : template.variables.length
                     ? h('span', { className: 'iw-at-vars' }, `${template.variables.length} 个变量`)
                     : null,
                 ),
@@ -4478,6 +4744,11 @@ window.__ModuleLoader__.load({
         }
         if (files.length) {
           event.preventDefault()
+          // v2.3: while an agent template is active, paste fills its image input.
+          if (agentTemplate && allowAgentImage) {
+            setAgentImageFromFile(files[0])
+            return
+          }
           // v1.2: ComfyUI workflows do not accept reference images (v1 scope).
           if (comfy) {
             if (onToast) onToast('info', 'ComfyUI 工作流模式暂不支持参考图')
@@ -4508,8 +4779,8 @@ window.__ModuleLoader__.load({
           { className: 'iw-composer-wrap' },
           h(
             'div',
-            { className: cx('iw-composer', focused && 'focused'), ref: composerRef },
-            atMenu.open ? renderAtMenu() : null,
+            { className: cx('iw-composer', focused && 'focused', agentTemplate && 'iw-agent-mode'), ref: composerRef },
+            agentTemplate ? renderAgentPanel() : atMenu.open ? renderAtMenu() : null,
             refList.length
               ? h(
                   'div',
@@ -8331,6 +8602,38 @@ window.__ModuleLoader__.load({
       const [bindCategory, setBindCategory] = useState(() =>
         selected ? str(selected.bindWorkflowCategory) : '',
       )
+      const [kind, setKind] = useState(() => (selected && selected.kind === 'agent' ? 'agent' : 'text'))
+      const [agentSystem, setAgentSystem] = useState(() =>
+        selected && isObj(selected.agent) ? str(selected.agent.systemPrompt) : '',
+      )
+      const [agentUser, setAgentUser] = useState(() =>
+        selected && isObj(selected.agent) ? str(selected.agent.userTemplate) : '',
+      )
+      const [agentFormat, setAgentFormat] = useState(() =>
+        selected && isObj(selected.agent) && selected.agent.outputFormat === 'prompt_negative'
+          ? 'prompt_negative'
+          : 'prompt',
+      )
+      const [agentModelName, setAgentModelName] = useState(() =>
+        selected && isObj(selected.agent) ? str(selected.agent.model) : '',
+      )
+      const [agentInputs, setAgentInputs] = useState(() => {
+        const list =
+          selected && isObj(selected.agent) && Array.isArray(selected.agent.inputTypes)
+            ? selected.agent.inputTypes
+            : ['text', 'image']
+        return { text: list.indexOf('text') >= 0, image: list.indexOf('image') >= 0 }
+      })
+      // Agent connection settings (echoed from safeSettings).
+      const agentSettings = isObj(props.agentSettings) ? props.agentSettings : {}
+      const [agSource, setAgSource] = useState(() =>
+        agentSettings.agentSource === 'dsh' ? 'dsh' : 'api',
+      )
+      const [agBase, setAgBase] = useState(() => str(agentSettings.agentBaseUrl))
+      const [agKey, setAgKey] = useState('')
+      const [agModel, setAgModel] = useState(() => str(agentSettings.agentModel))
+      const [agBusy, setAgBusy] = useState(false)
+      const [agMsg, setAgMsg] = useState('')
       const [varDrafts, setVarDrafts] = useState({})
       const [busy, setBusy] = useState(false)
       const [error, setError] = useState('')
@@ -8342,6 +8645,23 @@ window.__ModuleLoader__.load({
         setCategory(selected ? str(selected.category) : '通用')
         setContent(selected ? str(selected.content) : '')
         setBindCategory(selected ? str(selected.bindWorkflowCategory) : '')
+        setKind(selected && selected.kind === 'agent' ? 'agent' : 'text')
+        setAgentSystem(selected && isObj(selected.agent) ? str(selected.agent.systemPrompt) : '')
+        setAgentUser(selected && isObj(selected.agent) ? str(selected.agent.userTemplate) : '')
+        setAgentFormat(
+          selected && isObj(selected.agent) && selected.agent.outputFormat === 'prompt_negative'
+            ? 'prompt_negative'
+            : 'prompt',
+        )
+        setAgentModelName(selected && isObj(selected.agent) ? str(selected.agent.model) : '')
+        const inputList =
+          selected && isObj(selected.agent) && Array.isArray(selected.agent.inputTypes)
+            ? selected.agent.inputTypes
+            : ['text', 'image']
+        setAgentInputs({
+          text: inputList.indexOf('text') >= 0,
+          image: inputList.indexOf('image') >= 0,
+        })
         setVarDrafts({})
         setError('')
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -8362,7 +8682,7 @@ window.__ModuleLoader__.load({
           setError('请填写模板名称')
           return
         }
-        if (!str(content).trim()) {
+        if (kind !== 'agent' && !str(content).trim()) {
           setError('模板内容不能为空')
           return
         }
@@ -8374,6 +8694,17 @@ window.__ModuleLoader__.load({
             name: cleanName,
             category: str(category).trim() || '通用',
             content: str(content),
+            kind,
+            agent: {
+              inputTypes: [
+                agentInputs.text ? 'text' : '',
+                agentInputs.image ? 'image' : '',
+              ].filter(Boolean),
+              systemPrompt: str(agentSystem),
+              userTemplate: str(agentUser),
+              outputFormat: agentFormat,
+              model: str(agentModelName),
+            },
             variables,
             bindWorkflowCategory: bindCategory,
             tags: [],
@@ -8382,6 +8713,37 @@ window.__ModuleLoader__.load({
           setError((failure && failure.message) || String(failure))
         } finally {
           setBusy(false)
+        }
+      }
+
+      const saveAgentSettings = async () => {
+        setAgBusy(true)
+        setAgMsg('')
+        try {
+          await props.onSaveAgentConfig({
+            agentSource: agSource,
+            agentBaseUrl: agBase,
+            agentModel: agModel,
+            ...(str(agKey).trim() ? { agentApiKey: str(agKey).trim() } : {}),
+          })
+          setAgKey('')
+          setAgMsg('Agent 设置已保存')
+        } catch (failure) {
+          setAgMsg((failure && failure.message) || String(failure))
+        } finally {
+          setAgBusy(false)
+        }
+      }
+      const testAgent = async () => {
+        setAgBusy(true)
+        setAgMsg('')
+        try {
+          const result = await props.onTestAgent()
+          setAgMsg(str(result && result.hint) || '探测完成')
+        } catch (failure) {
+          setAgMsg((failure && failure.message) || String(failure))
+        } finally {
+          setAgBusy(false)
         }
       }
 
@@ -8412,6 +8774,43 @@ window.__ModuleLoader__.load({
         ),
         h(
           'div',
+          { className: 'iw-agent-settings' },
+          h(
+            'div',
+            { className: 'iw-agent-settings-head' },
+            h('div', { className: 'iw-agent-settings-title' }, 'Agent 模型（✨ 模板使用）'),
+            h(
+              'div',
+              { className: 'iw-agent-settings-sub' },
+              '留空则复用生图 API 的地址与 Key；DSH 通道需要宿主暴露模型服务。',
+            ),
+          ),
+          h(
+            'div',
+            { className: 'iw-agent-settings-grid' },
+            h(Select, {
+              className: 'iw-param-select',
+              value: agSource,
+              options: [
+                { value: 'api', label: 'Agent API（OpenAI 兼容）' },
+                { value: 'dsh', label: 'DSH 模型（实验）' },
+              ],
+              onChange: setAgSource,
+            }),
+            h('input', { className: 'iw-input', value: agBase, placeholder: 'Agent API 地址，例如 https://api.example.com/v1', onChange: (event) => setAgBase(event.target.value) }),
+            h('input', { className: 'iw-input', type: 'password', value: agKey, placeholder: agentSettings.agentApiKeySet ? '已配置 ' + str(agentSettings.agentApiKeyHint) + '（留空不改）' : 'Agent API Key', onChange: (event) => setAgKey(event.target.value) }),
+            h('input', { className: 'iw-input', value: agModel, placeholder: 'Agent 模型，例如 gpt-4o-mini', onChange: (event) => setAgModel(event.target.value) }),
+          ),
+          h(
+            'div',
+            { className: 'iw-agent-settings-actions' },
+            h('button', { type: 'button', className: 'iw-btn', disabled: agBusy, onClick: () => void saveAgentSettings() }, agBusy ? '处理中…' : '保存 Agent 设置'),
+            h('button', { type: 'button', className: 'iw-btn', disabled: agBusy, onClick: () => void testAgent() }, '测试连接'),
+            agMsg ? h('span', { className: 'iw-agent-settings-msg' }, agMsg) : null,
+          ),
+        ),
+        h(
+          'div',
           { className: 'iw-template-form' },
           h(
             Field,
@@ -8435,6 +8834,19 @@ window.__ModuleLoader__.load({
           ),
           h(
             Field,
+            { label: '模板类型' },
+            h(Select, {
+              className: 'iw-param-select',
+              value: kind,
+              options: [
+                { value: 'text', label: '文本模板' },
+                { value: 'agent', label: '✨ Agent 模板' },
+              ],
+              onChange: (value) => setKind(value),
+            }),
+          ),
+          h(
+            Field,
             { label: '绑定工作流分类（可选）' },
             h(Select, {
               className: 'iw-param-select',
@@ -8443,9 +8855,70 @@ window.__ModuleLoader__.load({
               onChange: (value) => setBindCategory(value),
             }),
           ),
+          kind === 'agent'
+            ? h(
+                React.Fragment,
+                null,
+                h(
+                  Field,
+                  { label: 'Agent System Prompt' },
+                  h('textarea', {
+                    className: 'iw-input iw-template-content',
+                    rows: 4,
+                    value: agentSystem,
+                    placeholder: '例如：你是资深 AI 绘画提示词工程师…',
+                    onChange: (event) => setAgentSystem(event.target.value),
+                  }),
+                ),
+                h(
+                  Field,
+                  { label: 'Agent 用户模板' },
+                  h('textarea', {
+                    className: 'iw-input iw-template-content',
+                    rows: 3,
+                    value: agentUser,
+                    placeholder: '根据以下输入生成最终提示词：{{input}}',
+                    onChange: (event) => setAgentUser(event.target.value),
+                  }),
+                ),
+                h(
+                  Field,
+                  { label: '输入类型' },
+                  h(
+                    'div',
+                    { className: 'iw-agent-inputs' },
+                    h('label', null, h('input', { type: 'checkbox', checked: agentInputs.text, onChange: (event) => setAgentInputs((previous) => ({ ...previous, text: event.target.checked })) }), '文字'),
+                    h('label', null, h('input', { type: 'checkbox', checked: agentInputs.image, onChange: (event) => setAgentInputs((previous) => ({ ...previous, image: event.target.checked })) }), '图片（反推提示词）'),
+                  ),
+                ),
+                h(
+                  Field,
+                  { label: '输出格式' },
+                  h(Select, {
+                    className: 'iw-param-select',
+                    value: agentFormat,
+                    options: [
+                      { value: 'prompt', label: '单一提示词' },
+                      { value: 'prompt_negative', label: '提示词 + 负面词' },
+                    ],
+                    onChange: (value) => setAgentFormat(value),
+                  }),
+                ),
+                h(
+                  Field,
+                  { label: '模型覆盖（可选）' },
+                  h('input', {
+                    className: 'iw-input',
+                    value: agentModelName,
+                    placeholder: '留空则使用上方 Agent 模型',
+                    onChange: (event) => setAgentModelName(event.target.value),
+                  }),
+                ),
+              )
+            : null,
           h(
             Field,
-            { label: '模板内容' },
+            { label: kind === 'agent' ? '附加上下文（可选）' : '模板内容' },
             h('textarea', {
               className: 'iw-input iw-template-content',
               rows: 7,
@@ -8491,7 +8964,11 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { className: 'iw-template-preview-body' },
-              rendered ? rendered : '（还没有内容）',
+              kind === 'agent'
+                ? 'Agent 模板：在输入框 @ 选中后，输入文字或图片让 Agent 生成提示词，确认后插入。'
+                : rendered
+                  ? rendered
+                  : '（还没有内容）',
             ),
           ),
           error ? h('div', { className: 'iw-form-error' }, error) : null,
@@ -9731,6 +10208,16 @@ window.__ModuleLoader__.load({
         setActiveTab('templates')
       }
 
+      async function handleSaveAgentConfig(payload) {
+        const data = await rpc('settings.set', payload)
+        setSettings(normalizeSettings(data))
+        pushToast('success', 'Agent 设置已保存')
+      }
+
+      async function handleTestAgent() {
+        return rpc('agent.probe')
+      }
+
       /** v2.1: switch the composer to a ComfyUI workflow and focus the input. */
       async function applyComfyWorkflowId(workflowId) {
         const id = str(workflowId)
@@ -10477,6 +10964,9 @@ window.__ModuleLoader__.load({
                         onSave: handleSaveTemplate,
                         onDelete: handleDeleteTemplate,
                         onInsert: handleInsertTemplate,
+                        agentSettings: settings,
+                        onSaveAgentConfig: handleSaveAgentConfig,
+                        onTestAgent: handleTestAgent,
                       })
                     : null,
                 ),

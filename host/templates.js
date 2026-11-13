@@ -60,6 +60,20 @@ function normalizeVariables(raw) {
   return out
 }
 
+function normalizeAgent(raw) {
+  const source = isPlainObject(raw) ? raw : {}
+  const inputTypes = Array.isArray(source.inputTypes)
+    ? source.inputTypes.filter((type) => type === 'text' || type === 'image')
+    : ['text', 'image']
+  return {
+    inputTypes: inputTypes.length ? [...new Set(inputTypes)] : ['text', 'image'],
+    systemPrompt: typeof source.systemPrompt === 'string' ? source.systemPrompt.slice(0, 8000) : '',
+    userTemplate: typeof source.userTemplate === 'string' ? source.userTemplate.slice(0, 8000) : '',
+    outputFormat: source.outputFormat === 'prompt_negative' ? 'prompt_negative' : 'prompt',
+    model: typeof source.model === 'string' ? source.model.trim().slice(0, 200) : '',
+  }
+}
+
 function normalizeStoredTemplate(item) {
   const createdAt = typeof item.createdAt === 'string' && item.createdAt ? item.createdAt : nowIso()
   const updatedAt = typeof item.updatedAt === 'string' && item.updatedAt ? item.updatedAt : createdAt
@@ -87,6 +101,8 @@ function normalizeStoredTemplate(item) {
     id: item.id,
     name,
     category,
+    kind: item.kind === 'agent' ? 'agent' : 'text',
+    agent: normalizeAgent(item.agent),
     content,
     variables,
     bindWorkflowCategory,
@@ -115,7 +131,19 @@ async function writeTemplateFile(data) {
 }
 
 function stripTemplate(template) {
-  return { ...template, variables: template.variables.map((variable) => ({ ...variable })) }
+  return {
+    ...template,
+    variables: template.variables.map((variable) => ({ ...variable })),
+    agent: { ...normalizeAgent(template.agent) },
+  }
+}
+
+export async function getTemplate(id) {
+  if (typeof id !== 'string' || !id) throw new ApiError('模板 ID 无效', 'INVALID_REQUEST', 400)
+  const data = await readTemplateFile()
+  const found = data.templates.find((item) => item.id === id)
+  if (!found) throw new ApiError('模板不存在或已删除', 'INVALID_REQUEST', 404)
+  return stripTemplate(found)
 }
 
 export async function listTemplates() {
@@ -127,12 +155,14 @@ export async function listTemplates() {
   return { templates: templates.map(stripTemplate) }
 }
 
-export async function saveTemplate({ id, name, category, content, variables, bindWorkflowCategory, bindWorkflowId, tags } = {}) {
+export async function saveTemplate({ id, name, category, kind, agent, content, variables, bindWorkflowCategory, bindWorkflowId, tags } = {}) {
   const cleanName = assertNonEmptyString(name, '模板名称', { max: 100 })
-  if (typeof content !== 'string' || !content.trim()) {
+  const cleanKind = kind === 'agent' ? 'agent' : 'text'
+  if (cleanKind !== 'agent' && (typeof content !== 'string' || !content.trim())) {
     throw new ApiError('模板内容不能为空', 'INVALID_REQUEST', 400)
   }
-  const cleanContent = content.slice(0, MAX_CONTENT)
+  const cleanContent = (typeof content === 'string' ? content : '').slice(0, MAX_CONTENT)
+  const cleanAgent = normalizeAgent(agent)
   const cleanVariables = normalizeVariables(variables)
   const cleanTags = Array.isArray(tags)
     ? tags
@@ -164,6 +194,8 @@ export async function saveTemplate({ id, name, category, content, variables, bin
             ? category.trim().slice(0, 40)
             : current.category || '通用',
         content: cleanContent,
+        kind: cleanKind,
+        agent: cleanAgent,
         variables: cleanVariables,
         ...bind,
         tags: cleanTags.length ? cleanTags : current.tags,
@@ -186,6 +218,8 @@ export async function saveTemplate({ id, name, category, content, variables, bin
       category:
         typeof category === 'string' && category.trim() ? category.trim().slice(0, 40) : '通用',
       content: cleanContent,
+      kind: cleanKind,
+      agent: cleanAgent,
       variables: cleanVariables,
       ...bind,
       tags: cleanTags,

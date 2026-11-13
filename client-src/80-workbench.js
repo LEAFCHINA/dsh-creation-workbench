@@ -391,6 +391,38 @@
       const [bindCategory, setBindCategory] = useState(() =>
         selected ? str(selected.bindWorkflowCategory) : '',
       )
+      const [kind, setKind] = useState(() => (selected && selected.kind === 'agent' ? 'agent' : 'text'))
+      const [agentSystem, setAgentSystem] = useState(() =>
+        selected && isObj(selected.agent) ? str(selected.agent.systemPrompt) : '',
+      )
+      const [agentUser, setAgentUser] = useState(() =>
+        selected && isObj(selected.agent) ? str(selected.agent.userTemplate) : '',
+      )
+      const [agentFormat, setAgentFormat] = useState(() =>
+        selected && isObj(selected.agent) && selected.agent.outputFormat === 'prompt_negative'
+          ? 'prompt_negative'
+          : 'prompt',
+      )
+      const [agentModelName, setAgentModelName] = useState(() =>
+        selected && isObj(selected.agent) ? str(selected.agent.model) : '',
+      )
+      const [agentInputs, setAgentInputs] = useState(() => {
+        const list =
+          selected && isObj(selected.agent) && Array.isArray(selected.agent.inputTypes)
+            ? selected.agent.inputTypes
+            : ['text', 'image']
+        return { text: list.indexOf('text') >= 0, image: list.indexOf('image') >= 0 }
+      })
+      // Agent connection settings (echoed from safeSettings).
+      const agentSettings = isObj(props.agentSettings) ? props.agentSettings : {}
+      const [agSource, setAgSource] = useState(() =>
+        agentSettings.agentSource === 'dsh' ? 'dsh' : 'api',
+      )
+      const [agBase, setAgBase] = useState(() => str(agentSettings.agentBaseUrl))
+      const [agKey, setAgKey] = useState('')
+      const [agModel, setAgModel] = useState(() => str(agentSettings.agentModel))
+      const [agBusy, setAgBusy] = useState(false)
+      const [agMsg, setAgMsg] = useState('')
       const [varDrafts, setVarDrafts] = useState({})
       const [busy, setBusy] = useState(false)
       const [error, setError] = useState('')
@@ -402,6 +434,23 @@
         setCategory(selected ? str(selected.category) : '通用')
         setContent(selected ? str(selected.content) : '')
         setBindCategory(selected ? str(selected.bindWorkflowCategory) : '')
+        setKind(selected && selected.kind === 'agent' ? 'agent' : 'text')
+        setAgentSystem(selected && isObj(selected.agent) ? str(selected.agent.systemPrompt) : '')
+        setAgentUser(selected && isObj(selected.agent) ? str(selected.agent.userTemplate) : '')
+        setAgentFormat(
+          selected && isObj(selected.agent) && selected.agent.outputFormat === 'prompt_negative'
+            ? 'prompt_negative'
+            : 'prompt',
+        )
+        setAgentModelName(selected && isObj(selected.agent) ? str(selected.agent.model) : '')
+        const inputList =
+          selected && isObj(selected.agent) && Array.isArray(selected.agent.inputTypes)
+            ? selected.agent.inputTypes
+            : ['text', 'image']
+        setAgentInputs({
+          text: inputList.indexOf('text') >= 0,
+          image: inputList.indexOf('image') >= 0,
+        })
         setVarDrafts({})
         setError('')
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -422,7 +471,7 @@
           setError('请填写模板名称')
           return
         }
-        if (!str(content).trim()) {
+        if (kind !== 'agent' && !str(content).trim()) {
           setError('模板内容不能为空')
           return
         }
@@ -434,6 +483,17 @@
             name: cleanName,
             category: str(category).trim() || '通用',
             content: str(content),
+            kind,
+            agent: {
+              inputTypes: [
+                agentInputs.text ? 'text' : '',
+                agentInputs.image ? 'image' : '',
+              ].filter(Boolean),
+              systemPrompt: str(agentSystem),
+              userTemplate: str(agentUser),
+              outputFormat: agentFormat,
+              model: str(agentModelName),
+            },
             variables,
             bindWorkflowCategory: bindCategory,
             tags: [],
@@ -442,6 +502,37 @@
           setError((failure && failure.message) || String(failure))
         } finally {
           setBusy(false)
+        }
+      }
+
+      const saveAgentSettings = async () => {
+        setAgBusy(true)
+        setAgMsg('')
+        try {
+          await props.onSaveAgentConfig({
+            agentSource: agSource,
+            agentBaseUrl: agBase,
+            agentModel: agModel,
+            ...(str(agKey).trim() ? { agentApiKey: str(agKey).trim() } : {}),
+          })
+          setAgKey('')
+          setAgMsg('Agent 设置已保存')
+        } catch (failure) {
+          setAgMsg((failure && failure.message) || String(failure))
+        } finally {
+          setAgBusy(false)
+        }
+      }
+      const testAgent = async () => {
+        setAgBusy(true)
+        setAgMsg('')
+        try {
+          const result = await props.onTestAgent()
+          setAgMsg(str(result && result.hint) || '探测完成')
+        } catch (failure) {
+          setAgMsg((failure && failure.message) || String(failure))
+        } finally {
+          setAgBusy(false)
         }
       }
 
@@ -472,6 +563,43 @@
         ),
         h(
           'div',
+          { className: 'iw-agent-settings' },
+          h(
+            'div',
+            { className: 'iw-agent-settings-head' },
+            h('div', { className: 'iw-agent-settings-title' }, 'Agent 模型（✨ 模板使用）'),
+            h(
+              'div',
+              { className: 'iw-agent-settings-sub' },
+              '留空则复用生图 API 的地址与 Key；DSH 通道需要宿主暴露模型服务。',
+            ),
+          ),
+          h(
+            'div',
+            { className: 'iw-agent-settings-grid' },
+            h(Select, {
+              className: 'iw-param-select',
+              value: agSource,
+              options: [
+                { value: 'api', label: 'Agent API（OpenAI 兼容）' },
+                { value: 'dsh', label: 'DSH 模型（实验）' },
+              ],
+              onChange: setAgSource,
+            }),
+            h('input', { className: 'iw-input', value: agBase, placeholder: 'Agent API 地址，例如 https://api.example.com/v1', onChange: (event) => setAgBase(event.target.value) }),
+            h('input', { className: 'iw-input', type: 'password', value: agKey, placeholder: agentSettings.agentApiKeySet ? '已配置 ' + str(agentSettings.agentApiKeyHint) + '（留空不改）' : 'Agent API Key', onChange: (event) => setAgKey(event.target.value) }),
+            h('input', { className: 'iw-input', value: agModel, placeholder: 'Agent 模型，例如 gpt-4o-mini', onChange: (event) => setAgModel(event.target.value) }),
+          ),
+          h(
+            'div',
+            { className: 'iw-agent-settings-actions' },
+            h('button', { type: 'button', className: 'iw-btn', disabled: agBusy, onClick: () => void saveAgentSettings() }, agBusy ? '处理中…' : '保存 Agent 设置'),
+            h('button', { type: 'button', className: 'iw-btn', disabled: agBusy, onClick: () => void testAgent() }, '测试连接'),
+            agMsg ? h('span', { className: 'iw-agent-settings-msg' }, agMsg) : null,
+          ),
+        ),
+        h(
+          'div',
           { className: 'iw-template-form' },
           h(
             Field,
@@ -495,6 +623,19 @@
           ),
           h(
             Field,
+            { label: '模板类型' },
+            h(Select, {
+              className: 'iw-param-select',
+              value: kind,
+              options: [
+                { value: 'text', label: '文本模板' },
+                { value: 'agent', label: '✨ Agent 模板' },
+              ],
+              onChange: (value) => setKind(value),
+            }),
+          ),
+          h(
+            Field,
             { label: '绑定工作流分类（可选）' },
             h(Select, {
               className: 'iw-param-select',
@@ -503,9 +644,70 @@
               onChange: (value) => setBindCategory(value),
             }),
           ),
+          kind === 'agent'
+            ? h(
+                React.Fragment,
+                null,
+                h(
+                  Field,
+                  { label: 'Agent System Prompt' },
+                  h('textarea', {
+                    className: 'iw-input iw-template-content',
+                    rows: 4,
+                    value: agentSystem,
+                    placeholder: '例如：你是资深 AI 绘画提示词工程师…',
+                    onChange: (event) => setAgentSystem(event.target.value),
+                  }),
+                ),
+                h(
+                  Field,
+                  { label: 'Agent 用户模板' },
+                  h('textarea', {
+                    className: 'iw-input iw-template-content',
+                    rows: 3,
+                    value: agentUser,
+                    placeholder: '根据以下输入生成最终提示词：{{input}}',
+                    onChange: (event) => setAgentUser(event.target.value),
+                  }),
+                ),
+                h(
+                  Field,
+                  { label: '输入类型' },
+                  h(
+                    'div',
+                    { className: 'iw-agent-inputs' },
+                    h('label', null, h('input', { type: 'checkbox', checked: agentInputs.text, onChange: (event) => setAgentInputs((previous) => ({ ...previous, text: event.target.checked })) }), '文字'),
+                    h('label', null, h('input', { type: 'checkbox', checked: agentInputs.image, onChange: (event) => setAgentInputs((previous) => ({ ...previous, image: event.target.checked })) }), '图片（反推提示词）'),
+                  ),
+                ),
+                h(
+                  Field,
+                  { label: '输出格式' },
+                  h(Select, {
+                    className: 'iw-param-select',
+                    value: agentFormat,
+                    options: [
+                      { value: 'prompt', label: '单一提示词' },
+                      { value: 'prompt_negative', label: '提示词 + 负面词' },
+                    ],
+                    onChange: (value) => setAgentFormat(value),
+                  }),
+                ),
+                h(
+                  Field,
+                  { label: '模型覆盖（可选）' },
+                  h('input', {
+                    className: 'iw-input',
+                    value: agentModelName,
+                    placeholder: '留空则使用上方 Agent 模型',
+                    onChange: (event) => setAgentModelName(event.target.value),
+                  }),
+                ),
+              )
+            : null,
           h(
             Field,
-            { label: '模板内容' },
+            { label: kind === 'agent' ? '附加上下文（可选）' : '模板内容' },
             h('textarea', {
               className: 'iw-input iw-template-content',
               rows: 7,
@@ -551,7 +753,11 @@
             h(
               'div',
               { className: 'iw-template-preview-body' },
-              rendered ? rendered : '（还没有内容）',
+              kind === 'agent'
+                ? 'Agent 模板：在输入框 @ 选中后，输入文字或图片让 Agent 生成提示词，确认后插入。'
+                : rendered
+                  ? rendered
+                  : '（还没有内容）',
             ),
           ),
           error ? h('div', { className: 'iw-form-error' }, error) : null,
@@ -1791,6 +1997,16 @@
         setActiveTab('templates')
       }
 
+      async function handleSaveAgentConfig(payload) {
+        const data = await rpc('settings.set', payload)
+        setSettings(normalizeSettings(data))
+        pushToast('success', 'Agent 设置已保存')
+      }
+
+      async function handleTestAgent() {
+        return rpc('agent.probe')
+      }
+
       /** v2.1: switch the composer to a ComfyUI workflow and focus the input. */
       async function applyComfyWorkflowId(workflowId) {
         const id = str(workflowId)
@@ -2537,6 +2753,9 @@
                         onSave: handleSaveTemplate,
                         onDelete: handleDeleteTemplate,
                         onInsert: handleInsertTemplate,
+                        agentSettings: settings,
+                        onSaveAgentConfig: handleSaveAgentConfig,
+                        onTestAgent: handleTestAgent,
                       })
                     : null,
                 ),

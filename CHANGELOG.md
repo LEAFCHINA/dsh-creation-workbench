@@ -2,6 +2,22 @@
 
 First public release: **1.2.2**.
 
+## 2.3.0 — ✨ Agent templates
+
+- **Agent templates**: a template can now be a ✨ Agent template with its own
+  system prompt, user template (`{{input}}`), allowed input types
+  (文字 / 图片) and output format (单一提示词 / 提示词+负面词). Content is optional.
+- **Composer agent mode**: typing `@` and picking an agent template switches the
+  composer into agent mode (colored border + panel). Type an idea and/or paste
+  or attach an image (反推提示词) → 「生成提示词」→ the result appears in an
+  editable card → 「确认插入」 puts it into the composer.
+- **Agent model settings** in the 模板 tab: OpenAI-compatible base URL / key /
+  model (falls back to the image API settings), plus a 「测试连接」 probe that
+  reports whether the DSH host exposes a model service. DSH-model channel is
+  detected but not yet adapted (use the Agent API for now).
+- Host RPCs: `agent.run`, `agent.probe`; template records gain `kind`/`agent`.
+
+
 ## 2.2.1
 
 - **Fix: activity tabs did nothing** — the workbench did not pass

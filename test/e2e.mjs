@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHarness } from './rpc-harness.mjs'
+import { createServer } from 'node:http'
 import { startMockComfy, resetState, state as mockState } from './mock-comfy.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -27,6 +28,19 @@ function section(t) {
 }
 
 const mock = await startMockComfy({ port: 18188 })
+const chatCalls = []
+const chatServer = await new Promise((resolve) => {
+  const server = createServer((req, res) => {
+    let raw = ''
+    req.on('data', (chunk) => { raw += chunk })
+    req.on('end', () => {
+      try { chatCalls.push({ url: req.url, headers: req.headers, body: JSON.parse(raw) }) } catch { chatCalls.push({ url: req.url, raw }) }
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ choices: [{ message: { content: '测试提示词：雨夜霓虹街头，35mm，浅景深' } }] }))
+    })
+  })
+  server.listen(18189, '127.0.0.1', () => resolve(server))
+})
 const h = await createHarness()
 
 try {
@@ -386,6 +400,63 @@ try {
   const tplAfterDelete = await h.op('template.list')
   ok('模板删除生效', !(tplAfterDelete?.templates || []).some((item) => item.id === tplId))
 
+  section('4g. Agent 模板（LLM 通道）')
+  const agentSettings = await h.op('settings.set', {
+    agentSource: 'api',
+    agentBaseUrl: 'http://127.0.0.1:18189/v1',
+    agentApiKey: 'sk-test-agent',
+    agentModel: 'test-model',
+  })
+  ok('Agent 设置保存', agentSettings?.agentModel === 'test-model' && agentSettings?.agentApiKeySet === true, JSON.stringify(agentSettings))
+  const probe = await h.op('agent.probe')
+  ok('agent.probe 返回探测结构', Array.isArray(probe?.available) && typeof probe?.hint === 'string', JSON.stringify(probe))
+  const agentTpl = await h.op('template.save', {
+    name: '反推提示词',
+    category: 'Agent',
+    kind: 'agent',
+    content: '',
+    variables: [],
+    agent: {
+      inputTypes: ['text', 'image'],
+      systemPrompt: '你是提示词工程师',
+      userTemplate: '根据以下输入生成提示词：{{input}}',
+      outputFormat: 'prompt',
+      model: 'test-model',
+    },
+  })
+  const agentTplId = agentTpl?.template?.id
+  ok('Agent 模板保存返回 id', typeof agentTplId === 'string', JSON.stringify(agentTpl))
+  const agentList = await h.op('template.list')
+  const agentItem = (agentList?.templates || []).find((item) => item.id === agentTplId)
+  ok('模板 kind/agent 字段保留', agentItem?.kind === 'agent' && agentItem?.agent?.inputTypes?.length === 2, JSON.stringify(agentItem))
+  const runText = await h.op('agent.run', { templateId: agentTplId, input: { text: '雨夜街头' } })
+  ok('agent.run 返回提示词', /测试提示词/.test(runText?.prompt || ''), JSON.stringify(runText))
+  const call = chatCalls[0]
+  ok('Chat 请求带模型与鉴权', call?.body?.model === 'test-model' && /Bearer sk-test-agent/.test(call?.headers?.authorization || ''), JSON.stringify({ model: call?.body?.model, auth: call?.headers?.authorization }))
+  ok('Chat 消息含 system + user 模板', call?.body?.messages?.[0]?.role === 'system' && /雨夜街头/.test(JSON.stringify(call?.body?.messages?.[1] || {})), JSON.stringify(call?.body?.messages))
+  const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  const runImage = await h.op('agent.run', { templateId: agentTplId, input: { text: '反推这张图', imageBase64: tinyPng, imageMime: 'image/png' } })
+  ok('agent.run 支持图片输入', /测试提示词/.test(runImage?.prompt || ''), JSON.stringify(runImage))
+  const imageCall = chatCalls[1]
+  ok('图片以 image_url data URL 发送', /data:image\/png;base64/.test(JSON.stringify(imageCall?.body?.messages || [])), JSON.stringify(imageCall?.body?.messages)?.slice(0, 200))
+  let agentNoInput = false
+  try {
+    await h.op('agent.run', { templateId: agentTplId, input: { text: '' } })
+  } catch (err) {
+    agentNoInput = err.status === 400 || err.code === 'INVALID_REQUEST'
+  }
+  ok('空输入被拒绝', agentNoInput)
+  await h.op('settings.set', { agentSource: 'dsh' })
+  let dshError = ''
+  try {
+    await h.op('agent.run', { templateId: agentTplId, input: { text: 'x' } })
+  } catch (err) {
+    dshError = String(err?.message || '')
+  }
+  ok('DSH 通道未适配时给出可读错误', /DSH|模型服务/.test(dshError), dshError)
+  await h.op('settings.set', { agentSource: 'api', agentBaseUrl: '', agentModel: '', clearAgentApiKey: true })
+  await h.op('template.delete', { id: agentTplId })
+
   section('5. 错误路径')
   mockState.failSystemStats = true
   const bad = await h.op('comfy.status')
@@ -393,6 +464,7 @@ try {
   mockState.failSystemStats = false
   void mockState
 } finally {
+  await new Promise((resolve) => chatServer.close(resolve))
   await mock.close()
 }
 

@@ -806,3 +806,57 @@ export async function listModels(rawSettings) {
     return fallback(String(error?.message || error))
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Agent (LLM) channel for ✨ prompt templates (v2.3)                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One OpenAI-compatible `/chat/completions` call, reusing the same proxy and
+ * abort/timeout transport as the image API. Throws readable ApiErrors.
+ */
+export async function runAgentChat({ settings, messages, model, signal }) {
+  const base = store.normalizeBaseUrl(settings?.agentBaseUrl || settings?.baseUrl || '')
+  const apiKey = String(settings?.agentApiKey || settings?.apiKey || '').trim()
+  const resolvedModel = String(model || settings?.agentModel || '').trim()
+  if (!base) {
+    throw new ApiError('请先在设置中填写 Agent API 地址（或用生图 API 地址）', 'INVALID_REQUEST', 400)
+  }
+  if (!apiKey) {
+    throw new ApiError('请先在设置中填写 Agent API Key（或复用生图 API Key）', 'INVALID_REQUEST', 400)
+  }
+  if (!resolvedModel) {
+    throw new ApiError('请先在设置中填写 Agent 模型（例如 gpt-4o-mini）', 'INVALID_REQUEST', 400)
+  }
+  const url = /\/chat\/completions$/i.test(base) ? base : `${base.replace(/\/+$/, '')}/chat/completions`
+  const payload = await requestJson(
+    url,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ model: resolvedModel, messages, temperature: 0.7 }),
+    },
+    {
+      dialect: 'agent',
+      proxyUrl: settings?.proxyUrl,
+      timeoutMs: 180000,
+      timeoutMessage: 'Agent 请求超时（180 秒）',
+      signal,
+    },
+  )
+  const choice = Array.isArray(payload?.choices) ? payload.choices[0] : null
+  const message = choice && typeof choice === 'object' ? choice.message : null
+  let content = ''
+  if (typeof message?.content === 'string') content = message.content
+  else if (Array.isArray(message?.content)) {
+    content = message.content
+      .map((part) => (part && typeof part.text === 'string' ? part.text : ''))
+      .join('\n')
+  }
+  content = String(content || '').trim()
+  if (!content) throw new ApiError('Agent 返回了空结果，请检查模型或重试', 'AGENT_EMPTY', 502)
+  return { prompt: content, model: resolvedModel }
+}

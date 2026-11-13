@@ -244,6 +244,11 @@ export function defaultSettings() {
     comfyBaseUrl: 'http://127.0.0.1:8188',
     jobTimeoutMs: JOB_TIMEOUT_DEFAULT_MS,
     proxyUrl: '',
+    // v2.3: Agent (LLM) channel for ✨ templates; baseUrl/key fall back to the image API.
+    agentSource: 'api',
+    agentBaseUrl: '',
+    agentApiKey: '',
+    agentModel: '',
     imageDir: '',
     saveDir: '',
     modelCosts: {},
@@ -388,6 +393,10 @@ export function normalizeSettings(raw) {
       : base.comfyBaseUrl,
     jobTimeoutMs: normalizeJobTimeoutMs(source.jobTimeoutMs),
     proxyUrl: typeof source.proxyUrl === 'string' ? source.proxyUrl.trim() : '',
+    agentSource: source.agentSource === 'dsh' ? 'dsh' : 'api',
+    agentBaseUrl: typeof source.agentBaseUrl === 'string' ? source.agentBaseUrl.trim() : '',
+    agentApiKey: typeof source.agentApiKey === 'string' ? source.agentApiKey.trim() : '',
+    agentModel: typeof source.agentModel === 'string' ? source.agentModel.trim() : '',
     // CONTRACT 补丁 v1.10: first-run proxy onboarding state.
     proxyAuto: source.proxyAuto === true,
     onboardDone: source.onboardDone === true,
@@ -464,6 +473,11 @@ export function safeSettings(raw) {
     proxySet: Boolean(settings.proxyUrl),
     proxyAuto: settings.proxyAuto,
     onboardDone: settings.onboardDone,
+    agentSource: settings.agentSource,
+    agentBaseUrl: settings.agentBaseUrl ? normalizeBaseUrl(settings.agentBaseUrl) : '',
+    agentApiKeySet: Boolean(settings.agentApiKey),
+    agentApiKeyHint: maskApiKey(settings.agentApiKey),
+    agentModel: settings.agentModel,
     imageDir: settings.imageDir,
     saveDir: settings.saveDir,
     modelCosts: { ...settings.modelCosts },
@@ -516,6 +530,36 @@ export async function applySettings(body) {
         throw new ApiError('ComfyUI 服务地址必须以 http:// 或 https:// 开头', 'INVALID_REQUEST', 400)
       }
       updated.comfyBaseUrl = comfyBaseUrl
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'agentSource')) {
+      if (body.agentSource !== 'api' && body.agentSource !== 'dsh') {
+        throw new ApiError('Agent 模型来源必须是 api 或 dsh', 'INVALID_REQUEST', 400)
+      }
+      updated.agentSource = body.agentSource
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'agentBaseUrl')) {
+      if (typeof body.agentBaseUrl !== 'string') {
+        throw new ApiError('Agent API 地址必须是字符串', 'INVALID_REQUEST', 400)
+      }
+      const agentBase = body.agentBaseUrl.trim().replace(/\/+$/, '')
+      if (agentBase.length > 0 && !/^https?:\/\//i.test(agentBase)) {
+        throw new ApiError('Agent API 地址必须以 http:// 或 https:// 开头', 'INVALID_REQUEST', 400)
+      }
+      updated.agentBaseUrl = agentBase
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'agentApiKey')) {
+      if (typeof body.agentApiKey !== 'string') {
+        throw new ApiError('Agent API Key 必须是字符串', 'INVALID_REQUEST', 400)
+      }
+      const agentKey = body.agentApiKey.trim()
+      if (agentKey.length > 0) updated.agentApiKey = agentKey
+    }
+    if (body.clearAgentApiKey === true) updated.agentApiKey = ''
+    if (Object.prototype.hasOwnProperty.call(body, 'agentModel')) {
+      if (typeof body.agentModel !== 'string') {
+        throw new ApiError('Agent 模型必须是字符串', 'INVALID_REQUEST', 400)
+      }
+      updated.agentModel = body.agentModel.trim().slice(0, 200)
     }
     if (Object.prototype.hasOwnProperty.call(body, 'proxyUrl')) {
       // CONTRACT 补丁 v1.2 §1: ''/null clears (direct); only http(s) proxies.
