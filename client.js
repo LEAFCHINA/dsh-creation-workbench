@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-35'
+    const BUILD = '2026-11-13-client-m2-36'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -5121,7 +5121,7 @@ window.__ModuleLoader__.load({
                     })
                   : null,
               ),
-              comfy && vram && vram.totalBytes > 0
+              comfy && vram && (vram.totalBytes > 0 || vram.totalGiB > 0)
                 ? h(
                     'span',
                     { className: 'iw-vram', title: 'ComfyUI 显存占用（模型常驻时会保持高位）' },
@@ -10664,6 +10664,9 @@ window.__ModuleLoader__.load({
       function normalizeVram(raw) {
         if (!isObj(raw) || !(num(raw.totalBytes, 0) > 0)) return null
         return {
+          totalBytes: num(raw.totalBytes, 0),
+          usedBytes: num(raw.usedBytes, 0),
+          freeBytes: num(raw.freeBytes, 0),
           totalGiB: toGiB(raw.totalBytes),
           usedGiB: toGiB(raw.usedBytes),
           freeGiB: toGiB(raw.freeBytes),

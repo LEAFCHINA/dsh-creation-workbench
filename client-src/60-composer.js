@@ -1137,7 +1137,7 @@
                     })
                   : null,
               ),
-              comfy && vram && vram.totalBytes > 0
+              comfy && vram && (vram.totalBytes > 0 || vram.totalGiB > 0)
                 ? h(
                     'span',
                     { className: 'iw-vram', title: 'ComfyUI 显存占用（模型常驻时会保持高位）' },

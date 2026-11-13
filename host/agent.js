@@ -105,11 +105,19 @@ function buildUserContent(template, text, imageBase64, imageMime) {
  * v2.3.3: an agent template's 附加上下文 (template.content) is real material —
  * rules, style guides, skill docs. It must reach the model, not sit unused.
  */
-function agentSystemPrompt(template, agent) {
+function agentSystemPrompt(template, agent, { includeContext = true } = {}) {
   const custom = typeof agent?.systemPrompt === 'string' ? agent.systemPrompt.trim() : ''
   const context = typeof template?.content === 'string' ? template.content.trim() : ''
   const base = custom || DEFAULT_SYSTEM_PROMPT
   if (!context) return base
+  if (!includeContext) {
+    // v2.6: follow-up turns edit an existing draft — the long rules/skill doc was
+    // already applied on the first turn, so re-sending it only costs tokens.
+    return (
+      base +
+      '\n\n用户已经有一版提示词，本轮只按用户的新要求做增量修改；保持其余描述不变。'
+    )
+  }
   return `${base}\n\n以下是本模板附带的规则与参考资料，生成时必须遵守：\n${context.slice(0, 16000)}`
 }
 
@@ -345,7 +353,8 @@ async function runDshAgent({ ctx, settings, template, agent, conversation, outpu
     )
   }
 
-  const systemPrompt = agentSystemPrompt(template, agent)
+  const followUp = conversation.filter((turn) => turn.role === 'user').length > 1
+  const systemPrompt = agentSystemPrompt(template, agent, { includeContext: !followUp })
   const hasImage = conversation.some((turn) => !!turn.imageBase64)
   if (hasImage) {
     const supportsImage = await dshModelSupportsImage(llm, provider, model)
@@ -450,7 +459,7 @@ async function runDshAgent({ ctx, settings, template, agent, conversation, outpu
   }
   void store
     .logHost(
-      `agent dsh ${provider}/${model} ms=${Date.now() - startedAt} finish=${result.finishKind || '-'} chars=${result.text.length} reasoning=${result.reasoningChars} efforts=[${reasoningEfforts.join(',')}] low=${lowEffort || '-'}`,
+      `agent dsh ${provider}/${model} ms=${Date.now() - startedAt} finish=${result.finishKind || '-'} chars=${result.text.length} reasoning=${result.reasoningChars} ctx=${systemPrompt.length}char/${followUp ? 'follow-up' : 'full'} efforts=[${reasoningEfforts.join(',')}] low=${lowEffort || '-'}`,
     )
     .catch(() => {})
   const prompt = result.text
@@ -571,7 +580,8 @@ export async function runAgent({ settings, payload, ctx } = {}) {
     return runDshAgent({ ctx, settings, template, agent, conversation, outputFormat })
   }
 
-  const systemPrompt = agentSystemPrompt(template, agent)
+  const followUp = conversation.filter((turn) => turn.role === 'user').length > 1
+  const systemPrompt = agentSystemPrompt(template, agent, { includeContext: !followUp })
   const messages = [{ role: 'system', content: systemPrompt }]
   for (const turn of conversation) {
     messages.push({

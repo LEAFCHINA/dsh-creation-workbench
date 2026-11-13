@@ -2351,6 +2351,9 @@
       function normalizeVram(raw) {
         if (!isObj(raw) || !(num(raw.totalBytes, 0) > 0)) return null
         return {
+          totalBytes: num(raw.totalBytes, 0),
+          usedBytes: num(raw.usedBytes, 0),
+          freeBytes: num(raw.freeBytes, 0),
           totalGiB: toGiB(raw.totalBytes),
           usedGiB: toGiB(raw.usedBytes),
           freeGiB: toGiB(raw.freeBytes),

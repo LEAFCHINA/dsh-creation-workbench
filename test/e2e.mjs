@@ -451,6 +451,12 @@ try {
   const call = chatCalls[0]
   ok('Chat 请求带模型与鉴权', call?.body?.model === 'test-model' && /Bearer sk-test-agent/.test(call?.headers?.authorization || ''), JSON.stringify({ model: call?.body?.model, auth: call?.headers?.authorization }))
   ok('Chat 消息含 system + user 模板', call?.body?.messages?.[0]?.role === 'system' && /雨夜街头/.test(JSON.stringify(call?.body?.messages?.[1] || {})), JSON.stringify(call?.body?.messages))
+  const firstTurnSystem = String(chatCalls[0]?.body?.messages?.[0]?.content || '')
+  ok(
+    '首轮 system prompt 含模板上下文',
+    /胶片质感/.test(firstTurnSystem) && /以下是本模板附带的规则/.test(firstTurnSystem),
+    String(firstTurnSystem.length),
+  )
   ok(
     '模板附加上下文进入 system prompt',
     /胶片质感/.test(String(call?.body?.messages?.[0]?.content || '')),
@@ -481,6 +487,12 @@ try {
       multiMsgs[2].role === 'assistant' &&
       multiMsgs[3].role === 'user',
     JSON.stringify(multiMsgs.map((m) => m.role)),
+  )
+  const multiSystem = String(multiCall?.body?.messages?.[0]?.content || '')
+  ok(
+    '后续轮次不再重复发送模板长上下文',
+    !/胶片质感/.test(multiSystem) && /增量修改/.test(multiSystem) && multiSystem.length < firstTurnSystem.length,
+    String(multiSystem.length),
   )
   ok(
     '多轮历史内容保留',

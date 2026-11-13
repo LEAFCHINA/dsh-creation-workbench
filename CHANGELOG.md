@@ -2,6 +2,18 @@
 
 First public release: **1.2.2**.
 
+## 2.6.0
+
+- **Fix: the VRAM indicator never appeared.** The client normalized the ComfyUI
+  VRAM payload but dropped the raw byte fields the render guard checks, so the
+  chip was always hidden. The composer now shows `显存 27.7/31.8G · 释放` in
+  ComfyUI workflow mode.
+- **Faster follow-up agent turns**: the first turn sends the template's full
+  attached context (rules / skill docs); later turns only send the short system
+  prompt plus an “incremental edit” instruction plus the conversation, instead of
+  re-sending up to 16k characters of rules every time.
+
+
 ## 2.5.1
 
 - **Agent turns are up to 2× faster when the model runs long**: the empty-result
