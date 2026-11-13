@@ -414,7 +414,7 @@ try {
     name: '反推提示词',
     category: 'Agent',
     kind: 'agent',
-    content: '',
+    content: '【附加上下文】风格必须以胶片质感描述为准。',
     variables: [],
     agent: {
       inputTypes: ['text', 'image'],
@@ -434,6 +434,11 @@ try {
   const call = chatCalls[0]
   ok('Chat 请求带模型与鉴权', call?.body?.model === 'test-model' && /Bearer sk-test-agent/.test(call?.headers?.authorization || ''), JSON.stringify({ model: call?.body?.model, auth: call?.headers?.authorization }))
   ok('Chat 消息含 system + user 模板', call?.body?.messages?.[0]?.role === 'system' && /雨夜街头/.test(JSON.stringify(call?.body?.messages?.[1] || {})), JSON.stringify(call?.body?.messages))
+  ok(
+    '模板附加上下文进入 system prompt',
+    /胶片质感/.test(String(call?.body?.messages?.[0]?.content || '')),
+    String(call?.body?.messages?.[0]?.content || '').slice(0, 120),
+  )
   const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
   const runImage = await h.op('agent.run', { templateId: agentTplId, input: { text: '反推这张图', imageBase64: tinyPng, imageMime: 'image/png' } })
   ok('agent.run 支持图片输入', /测试提示词/.test(runImage?.prompt || ''), JSON.stringify(runImage))
@@ -459,6 +464,112 @@ try {
   ok('DSH 通道未适配时给出可读错误', /DSH|模型服务/.test(dshError), dshError)
   await h.op('settings.set', { agentSource: 'api', agentBaseUrl: '', agentModel: '', agentDshProvider: '', agentDshModel: '', clearAgentApiKey: true })
   await h.op('template.delete', { id: agentTplId })
+
+  section('4h. DSH 模型通道（桩 ctx：文字 / 图片 / 仅文字模型）')
+  const dshCalls = []
+  const fakeCtx = {
+    get(name) {
+      if (name === 'llm') {
+        return {
+          listProviders: () => [{ id: 'stub-provider', name: 'Stub' }],
+          listModels: async () => [
+            { id: 'stub-vision', name: 'Stub Vision', inputModalities: ['text', 'image'] },
+            { id: 'stub-text', name: 'Stub Text', inputModalities: ['text'] },
+          ],
+          resolveModelInfo: async (provider, model) => ({
+            provider,
+            id: model,
+            name: model,
+            inputModalities: model === 'stub-vision' ? ['text', 'image'] : ['text'],
+          }),
+          prepareCall: async (config) => ({
+            config: { ...config },
+            stream: (options) => {
+              dshCalls.push({ config, options })
+              return (async function* () {
+                yield { type: 'text-delta', index: 0, text: 'DSH 生成：电影感霓虹' }
+                yield { type: 'finish', reason: { kind: 'stop' } }
+              })()
+            },
+          }),
+        }
+      }
+      if (name === 'attachments') {
+        return {
+          async admitPromptContent(content) {
+            return content.map((part) =>
+              part.type === 'image'
+                ? {
+                    type: 'image',
+                    attachment: {
+                      attachmentId: 'sha256:' + 'a'.repeat(64),
+                      mediaType: part.mediaType,
+                      name: part.name,
+                    },
+                  }
+                : { type: 'text', text: part.text },
+            )
+          },
+        }
+      }
+      return null
+    },
+  }
+  h.env.ctx = fakeCtx
+  const dshAgentTpl = await h.op('template.save', {
+    name: 'DSH 图片反推',
+    category: 'Agent',
+    kind: 'agent',
+    content: '',
+    variables: [],
+    agent: {
+      inputTypes: ['text', 'image'],
+      systemPrompt: '你是提示词工程师',
+      userTemplate: '',
+      outputFormat: 'prompt',
+      model: '',
+    },
+  })
+  const dshAgentTplId = dshAgentTpl?.template?.id
+  await h.op('settings.set', {
+    agentSource: 'dsh',
+    agentDshProvider: 'stub-provider',
+    agentDshModel: 'stub-vision',
+  })
+  const dshImageRun = await h.op('agent.run', {
+    templateId: dshAgentTplId,
+    input: { imageBase64: tinyPng, imageMime: 'image/png' },
+  })
+  ok('DSH 通道图片反推成功', /DSH 生成/.test(dshImageRun?.prompt || ''), JSON.stringify(dshImageRun))
+  ok('DSH 通道返回 model 标识', String(dshImageRun?.model || '').includes('stub-provider'), JSON.stringify(dshImageRun?.model))
+  const dshImageMsg = dshCalls[dshCalls.length - 1]?.options?.messages?.[0]
+  ok(
+    'DSH 请求包含 image 内容块',
+    Array.isArray(dshImageMsg?.content) && dshImageMsg.content.some((block) => block.type === 'image'),
+    JSON.stringify(dshImageMsg?.content)?.slice(0, 200),
+  )
+  const dshTextRun = await h.op('agent.run', {
+    templateId: dshAgentTplId,
+    input: { text: '雨夜街头' },
+  })
+  ok('DSH 通道纯文字也成功', /DSH 生成/.test(dshTextRun?.prompt || ''), JSON.stringify(dshTextRun))
+  await h.op('settings.set', { agentDshModel: 'stub-text' })
+  let textOnlyError = ''
+  let textOnlyCode = ''
+  try {
+    await h.op('agent.run', { templateId: dshAgentTplId, input: { imageBase64: tinyPng, imageMime: 'image/png' } })
+  } catch (err) {
+    textOnlyError = String(err?.message || '')
+    textOnlyCode = String(err?.payload?.code || err?.code || '')
+  }
+  ok(
+    '仅文字模型收到图片时给出可读错误并建议视觉模型',
+    /不支持图片输入/.test(textOnlyError) && /stub-vision/.test(textOnlyError),
+    textOnlyError,
+  )
+  ok('错误码为 AGENT_MODEL_TEXT_ONLY', textOnlyCode === 'AGENT_MODEL_TEXT_ONLY', textOnlyCode)
+  h.env.ctx = undefined
+  await h.op('template.delete', { id: dshAgentTplId })
 
   section('5. 错误路径')
   mockState.failSystemStats = true

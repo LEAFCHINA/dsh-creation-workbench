@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-32'
+    const BUILD = '2026-11-13-client-m2-33'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -8777,7 +8777,14 @@ window.__ModuleLoader__.load({
         dshModels && Array.isArray(dshModels.models)
           ? dshModels.models.filter((model) => !agProvider || model.provider === agProvider)
           : []
-      const dshModelOptions = dshModelList.map((model) => ({ value: model.id, label: model.name || model.id }))
+      const modelVisionOf = (model) =>
+        Array.isArray(model && model.inputModalities) && model.inputModalities.indexOf('image') >= 0
+      const dshModelOptions = dshModelList.map((model) => ({
+        value: model.id,
+        label: (model.name || model.id) + (modelVisionOf(model) ? ' · 支持图片' : ''),
+      }))
+      const selectedDshModel = dshModelList.find((model) => model.id === agDshModel) || null
+      const selectedDshVision = selectedDshModel ? modelVisionOf(selectedDshModel) : null
 
       const bindOptions = [
         { value: '', label: '不绑定' },
@@ -8836,7 +8843,19 @@ window.__ModuleLoader__.load({
                   h(Select, { className: 'iw-param-select', value: agProvider, options: providerOptions, onChange: (value) => { setAgProvider(value); setAgDshModel('') } }),
                   h(Select, { className: 'iw-param-select', value: agDshModel, options: dshModelOptions, onChange: setAgDshModel }),
                   h('button', { type: 'button', className: 'iw-btn', disabled: dshBusy, onClick: () => void loadDshModels() }, dshBusy ? '加载中…' : '刷新 DSH 模型'),
-                  h('span', { className: 'iw-agent-hint' }, dshModels && dshModels.ok ? '使用 DSH 当前模型，无需 API Key（文字输入；图片反推请用 Agent API）' : (dshModels && dshModels.error) || '正在读取 DSH 模型…'),
+                  h(
+                    'span',
+                    { className: 'iw-agent-hint' },
+                    !dshModels
+                      ? '正在读取 DSH 模型…'
+                      : !dshModels.ok
+                        ? dshModels.error
+                        : selectedDshModel
+                          ? selectedDshVision
+                            ? '使用 DSH 当前模型，无需 API Key；支持文字与图片（反推提示词）'
+                            : '该模型只支持文字；图片反推请选择带「支持图片」标记的模型，或改用 Agent API'
+                          : '选择 provider 与模型；带「支持图片」的模型可用于图片反推',
+                  ),
                 )
               : h(
                   React.Fragment,
@@ -8963,7 +8982,7 @@ window.__ModuleLoader__.load({
             : null,
           h(
             Field,
-            { label: kind === 'agent' ? '附加上下文（可选）' : '模板内容' },
+            { label: kind === 'agent' ? '附加上下文 / 规则（会一起发给 Agent）' : '模板内容' },
             h('textarea', {
               className: 'iw-input iw-template-content',
               rows: 7,

@@ -93,6 +93,18 @@ function buildUserContent(template, text, imageBase64, imageMime) {
   ]
 }
 
+/**
+ * v2.3.3: an agent template's 附加上下文 (template.content) is real material —
+ * rules, style guides, skill docs. It must reach the model, not sit unused.
+ */
+function agentSystemPrompt(template, agent) {
+  const custom = typeof agent?.systemPrompt === 'string' ? agent.systemPrompt.trim() : ''
+  const context = typeof template?.content === 'string' ? template.content.trim() : ''
+  const base = custom || DEFAULT_SYSTEM_PROMPT
+  if (!context) return base
+  return `${base}\n\n以下是本模板附带的规则与参考资料，生成时必须遵守：\n${context.slice(0, 16000)}`
+}
+
 function getLlm(ctx) {
   try {
     if (!ctx) return null
@@ -146,19 +158,73 @@ export async function listDshModels(ctx) {
 }
 
 /** Execute one ✨ template through the DSH host LLM service. */
-async function runDshAgent({ ctx, settings, template, agent, text, imageBase64 }) {
+/** Resolve the DSH attachment store used to admit image bytes (v2.3.3). */
+function getAttachments(ctx) {
+  const keys = ['attachments', 'attachment', 'attachmentStore', 'files']
+  try {
+    if (!ctx) return null
+    for (const key of keys) {
+      const found =
+        typeof ctx.get === 'function' ? ctx.get(key) : ctx[key]
+      if (found && typeof found.admitPromptContent === 'function') return found
+    }
+  } catch {
+    // fall through to the scan below
+  }
+  try {
+    if (typeof ctx === 'object') {
+      for (const key of Object.keys(ctx)) {
+        if (!/attach/i.test(key)) continue
+        const value = ctx[key]
+        if (value && typeof value.admitPromptContent === 'function') return value
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+/** Normalize any base64 (incl. whitespace/data-url leftovers) into canonical form. */
+function canonicalBase64(value) {
+  const text = String(value || '').replace(/^data:[^,]*,/, '').replace(/\s+/g, '')
+  if (!text) return ''
+  return Buffer.from(text, 'base64').toString('base64')
+}
+
+/** Whether the selected DSH model advertises image input. */
+async function dshModelSupportsImage(llm, provider, model) {
+  try {
+    if (typeof llm.resolveModelInfo !== 'function') return null
+    const info = await llm.resolveModelInfo(provider, model)
+    const modalities = Array.isArray(info?.inputModalities) ? info.inputModalities : []
+    if (!modalities.length) return null
+    return modalities.indexOf('image') >= 0
+  } catch {
+    return null
+  }
+}
+
+/** Best-effort suggestion of a vision-capable model on the same provider. */
+async function suggestVisionModel(llm, provider) {
+  try {
+    const models = await llm.listModels(provider)
+    const found = (Array.isArray(models) ? models : []).find(
+      (item) => Array.isArray(item.inputModalities) && item.inputModalities.indexOf('image') >= 0,
+    )
+    return found ? String(found.id) : ''
+  } catch {
+    return ''
+  }
+}
+
+/** Execute one ✨ template through the DSH host LLM service (text or image). */
+async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, imageMime }) {
   const llm = getLlm(ctx)
   if (!llm) {
     throw new ApiError(
       '当前环境没有可用的 DSH 模型服务（仅桌面端支持），请切换到 Agent API',
       'AGENT_DSH_UNAVAILABLE',
-      400,
-    )
-  }
-  if (imageBase64) {
-    throw new ApiError(
-      'DSH 模型通道暂只支持文字输入；图片反推请使用 Agent API',
-      'INVALID_REQUEST',
       400,
     )
   }
@@ -191,23 +257,62 @@ async function runDshAgent({ ctx, settings, template, agent, text, imageBase64 }
       400,
     )
   }
-  const systemPrompt =
-    typeof agent.systemPrompt === 'string' && agent.systemPrompt.trim()
-      ? agent.systemPrompt.trim()
-      : DEFAULT_SYSTEM_PROMPT
+
+  const systemPrompt = agentSystemPrompt(template, agent)
   const userText = buildUserContent(template, text, '', '')
+  const encodedImage = imageBase64 ? canonicalBase64(imageBase64) : ''
+
+  let content = [{ type: 'text', text: userText }]
+  if (encodedImage) {
+    const mime =
+      typeof imageMime === 'string' && /^image\/(png|jpeg|webp)$/i.test(imageMime)
+        ? imageMime.toLowerCase()
+        : 'image/png'
+    const supportsImage = await dshModelSupportsImage(llm, provider, model)
+    if (supportsImage === false) {
+      const suggestion = await suggestVisionModel(llm, provider)
+      throw new ApiError(
+        `当前 DSH 模型「${provider}/${model}」不支持图片输入${
+          suggestion ? `，请改用支持视觉的模型（例如 ${suggestion}）` : ''
+        }，或在 Agent 设置里切换到 Agent API`,
+        'AGENT_MODEL_TEXT_ONLY',
+        400,
+      )
+    }
+    const attachments = getAttachments(ctx)
+    if (!attachments || typeof attachments.admitPromptContent !== 'function') {
+      throw new ApiError(
+        '当前环境没有可用的附件存储服务，无法读取图片；请改用 Agent API 通道',
+        'AGENT_ATTACHMENT_UNAVAILABLE',
+        400,
+      )
+    }
+    try {
+      content = await attachments.admitPromptContent([
+        { type: 'text', text: userText },
+        { type: 'image', data: encodedImage, mediaType: mime, name: 'reference.png' },
+      ])
+    } catch (error) {
+      throw new ApiError(
+        `图片无法送入 DSH 模型：${String(error?.message || error)}（可换一张更小的图片或改用 Agent API）`,
+        'AGENT_IMAGE_REJECTED',
+        400,
+      )
+    }
+  }
+
   const messages = [
     {
       id: randomUUID(),
       role: 'user',
-      content: [{ type: 'text', text: userText }],
+      content,
       source: { kind: 'creation-workbench-agent' },
     },
   ]
   const signal = AbortSignal.timeout(180000)
   let call
   try {
-    call = await llm.prepareCall({ provider, model, maxTokens: 1200 }, signal)
+    call = await llm.prepareCall({ provider, model, maxTokens: 1600 }, signal)
   } catch (error) {
     throw new ApiError(
       `DSH 模型准备失败（${provider}/${model}）：${String(error?.message || error)}`,
@@ -287,12 +392,9 @@ export async function runAgent({ settings, payload, ctx } = {}) {
     throw new ApiError('图片过大，请换一张小一点的图片（≤ 6MB）', 'INVALID_REQUEST', 400)
   }
   if (settings?.agentSource === 'dsh') {
-    return runDshAgent({ ctx, settings, template, agent, text, imageBase64 })
+    return runDshAgent({ ctx, settings, template, agent, text, imageBase64, imageMime })
   }
-  const systemPrompt =
-    typeof agent.systemPrompt === 'string' && agent.systemPrompt.trim()
-      ? agent.systemPrompt.trim()
-      : DEFAULT_SYSTEM_PROMPT
+  const systemPrompt = agentSystemPrompt(template, agent)
   const messages = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: buildUserContent(template, text, imageBase64, imageMime) },

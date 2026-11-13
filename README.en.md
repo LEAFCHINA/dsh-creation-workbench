@@ -65,7 +65,7 @@ ComfyUI workflows in the editor — exposed node inputs become composer controls
 - **`@` picker**: type `@` in the composer to search templates (↑↓ to move, Enter to insert); templates with variables ask for the values first.
 - **Save as template**: capture the current composer text in one click.
 - **✨ Agent templates**: mark a template as Agent with a system prompt, input types (text / image) and output format (prompt, or prompt + negative). Selecting it puts the composer into agent mode: type an idea or attach an image → generate → confirm to insert.
-- **Two agent model channels**: any OpenAI-compatible endpoint (can reuse the image API base URL and key), or the **DSH host model directly** (no API key required).
+- **Two agent model channels**: any OpenAI-compatible endpoint (can reuse the image API base URL and key), or the **DSH host model directly** (no API key; image reverse-engineering works with vision-capable models).
 
 ### More
 

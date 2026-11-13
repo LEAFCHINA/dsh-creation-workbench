@@ -2,6 +2,23 @@
 
 First public release: **1.2.2**.
 
+## 2.3.3
+
+- **Fix: image reverse-engineering did not work with the DSH model channel.** The
+  DSH channel rejected every image with “text only”, even though most DSH models
+  are vision-capable. Images are now stored through the host attachment service
+  (`ctx.get('attachments').admitPromptContent`) and sent as a real `image`
+  content block, so 「反推提示词」 works with DSH models — no API key needed.
+- **Clearer model capability reporting**: the DSH model picker marks
+  vision-capable models with 「支持图片」 and explains why an image was refused,
+  suggesting a vision model on the same provider.
+- **Fix: a template's 附加上下文 (content) was never sent to the agent.** Agent
+  templates use the content as extra rules/reference material appended to the
+  system prompt (labelled 「附加上下文 / 规则（会一起发给 Agent）」 in the editor).
+- New error codes: `AGENT_MODEL_TEXT_ONLY`, `AGENT_ATTACHMENT_UNAVAILABLE`,
+  `AGENT_IMAGE_REJECTED`.
+
+
 ## 2.3.2 — bilingual documentation
 
 - **Bilingual docs**: `README.md` is now the Chinese README and `README.en.md` the

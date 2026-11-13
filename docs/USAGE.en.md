@@ -299,7 +299,7 @@ Best for: **image reverse-engineering** (multimodal) or using an external model.
 4. Press **保存 Agent 设置**.
 
 Best for: no key management, reusing the models already configured in DSH.
-Limitation: **text input only** — not usable for image reverse-engineering.
+Image reverse-engineering works, but **pick a model marked 「支持图片」** (e.g. `DeepSeek-V4.1-Flash`); a text-only model tells you to switch when it receives an image.
 
 Press **测试连接** (Test connection) to see which model services the host exposes.
 
@@ -479,7 +479,11 @@ Fixed in 2.1.0+ (per-conversation isolation). If it still happens, check that yo
 
 ### Agent image reverse-engineering not available
 
-The DSH model channel is text-only. To reverse-engineer images, select **Agent API** in the agent settings and use a vision-capable model (`gpt-4o-mini`, `qwen-vl-plus`, …).
+Read the error message:
+
+- **"current DSH model does not accept image input"** → pick a DSH model marked **「支持图片」** (e.g. `DeepSeek-V4.1-Flash`), or switch the source to **Agent API** with a vision model (`gpt-4o-mini`, `qwen-vl-plus`, …).
+- **"image could not be sent to the DSH model"** → the file is too large or unsupported; use a PNG / JPEG / WebP under 6 MB.
+- **"no DSH model service available"** → only DSH Desktop exposes host models; otherwise switch back to Agent API.
 
 ### Duplicate/missing image files
 
