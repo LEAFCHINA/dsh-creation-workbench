@@ -22,6 +22,24 @@ const DEFAULT_SYSTEM_PROMPT =
 const MAX_IMAGE_BASE64 = 8 * 1024 * 1024
 const DSH_SERVICE_KEYS = ['llm', 'languageModel', 'model', 'models', 'chat', 'agent', 'ai']
 
+/** Collect callable method names across the prototype chain (class instances). */
+function serviceMethods(service) {
+  const names = new Set()
+  let proto = service
+  for (let depth = 0; proto && depth < 4; depth += 1) {
+    for (const name of Object.getOwnPropertyNames(proto)) {
+      if (name === 'constructor') continue
+      try {
+        if (typeof service[name] === 'function') names.add(name)
+      } catch {
+        // getters may throw
+      }
+    }
+    proto = Object.getPrototypeOf(proto)
+  }
+  return [...names].slice(0, 30)
+}
+
 /** Report which DSH context services look like a model/LLM service. */
 export async function probeAgent(ctx) {
   const available = []
@@ -33,13 +51,7 @@ export async function probeAgent(ctx) {
         try {
           const service = ctx.get(key)
           if (!service) continue
-          const methods =
-            typeof service === 'object'
-              ? Object.keys(service)
-                  .filter((name) => typeof service[name] === 'function')
-                  .slice(0, 12)
-              : []
-          available.push({ key, methods })
+          available.push({ key, methods: serviceMethods(service) })
         } catch {
           // ignore individual service lookup failures
         }
@@ -49,15 +61,7 @@ export async function probeAgent(ctx) {
       for (const key of DSH_SERVICE_KEYS) {
         if (ctx[key]) {
           const service = ctx[key]
-          available.push({
-            key,
-            methods:
-              typeof service === 'object'
-                ? Object.keys(service)
-                    .filter((name) => typeof service[name] === 'function')
-                    .slice(0, 12)
-                : [],
-          })
+          available.push({ key, methods: serviceMethods(service) })
         }
       }
     }
