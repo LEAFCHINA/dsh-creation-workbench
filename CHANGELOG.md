@@ -2,6 +2,18 @@
 
 First public release: **1.2.2**.
 
+## 2.3.2 — bilingual documentation
+
+- **Bilingual docs**: `README.md` is now the Chinese README and `README.en.md` the
+  English one, with a language switcher at the top of both.
+- **New step-by-step usage guides**: `docs/USAGE.md` (中文) and
+  `docs/USAGE.en.md` (English) cover installation, both backends, the ComfyUI
+  workflow parameter editor, workspaces/drafts, prompt templates, ✨ agent
+  templates (API + DSH channels), the task panel, files, a full settings
+  reference and a troubleshooting FAQ.
+- Docs are now shipped in the npm package (`files` includes `README.en.md` and `docs`).
+
+
 ## 2.3.1
 
 - **DSH host model channel for ✨ Agent templates**: choose 「DSH 模型」 as the
