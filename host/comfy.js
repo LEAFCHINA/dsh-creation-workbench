@@ -1053,6 +1053,9 @@ function buildWorkflowGraph(template, specs, values, randomizeKeys, usedRandom) 
   const graph = JSON.parse(JSON.stringify(template))
   for (const spec of specs) {
     let value = values[spec.key]
+    // v3.1.1: an image slot without an uploaded file must not overwrite the
+    // LoadImage value that is already stored in the workflow.
+    if (spec.type === 'image' && !value) continue
     const shouldRandomize = randomizeKeys
       ? randomizeKeys.has(spec.key)
       : spec.randomize === true
@@ -1400,9 +1403,8 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
       400,
     )
   }
-  if (imageSpecs.length > 0 && refList.length === 0) {
-    throw new ApiError('该工作流需要一张图片作为输入，请点输入框的 + 添加图片', 'INVALID_REQUEST', 400)
-  }
+  // v3.1.1: no image supplied → run the workflow as-is (its LoadImage nodes keep
+  // whatever image they already reference); nothing gets muted.
   if (refList.length > imageSpecs.length) {
     throw new ApiError(
       `该工作流只启用了 ${imageSpecs.length} 个图像输入，最多只能给 ${imageSpecs.length} 张图`,
@@ -1410,16 +1412,9 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
       400,
     )
   }
-  if (imageSpecs.length > 0) {
-    for (let index = 0; index < imageSpecs.length; index += 1) {
+  if (imageSpecs.length > 0 && refList.length > 0) {
+    for (let index = 0; index < refList.length; index += 1) {
       const ref = refList[index]
-      if (!ref) {
-        throw new ApiError(
-          `第 ${index + 1} 个图像输入没有图片，请补齐`,
-          'INVALID_REQUEST',
-          400,
-        )
-      }
       const uploaded = await uploadImageToComfy(baseUrl, {
         bytes: ref.bytes,
         mime: ref.mime,
@@ -1485,7 +1480,7 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
       if (isPlainObject(params) && Object.keys(usedRandom).length > 0) {
         params.workflowRandomValues = { ...usedRandom }
       }
-      if (imageSpecs.length > 0) {
+      if (imageSpecs.length > 0 && refList.length > 0) {
         const muted = muteUnusedImageNodes(
           graph,
           imageSpecs.map((spec) => spec.nodeId),

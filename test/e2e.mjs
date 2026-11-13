@@ -715,19 +715,27 @@ try {
     JSON.stringify(editSent['31']?.inputs),
   )
   ok('未启用的 LoadImage 32 已被静音', !editSent['32'], JSON.stringify(Object.keys(editSent)))
-  let noImageRejected = false
-  try {
-    await h.op('generate', {
-      workspaceId: editWsId,
-      conversationId: editConvId,
-      prompt: '没有图',
-      refs: [],
-      params: { model: `comfy:${editId}`, n: 1, workflowId: editId, workflowParams: {}, displayName: '编辑工作流（单图）' },
-    })
-  } catch (err) {
-    noImageRejected = err.status === 400 && /需要一张图片/.test(String(err.payload?.error || err.message))
-  }
-  ok('缺少图片时给出可读错误', noImageRejected)
+  // v3.1.1: without a composer image the workflow keeps its own LoadImage values.
+  const noImgGen = await h.op('generate', {
+    workspaceId: editWsId,
+    conversationId: editConvId,
+    prompt: '不改图，直接用工作流自带图片',
+    refs: [],
+    params: { model: `comfy:${editId}`, n: 1, workflowId: editId, workflowParams: {}, displayName: '编辑工作流（单图）' },
+  })
+  const noImgDone = await waitDone(noImgGen?.jobId)
+  ok('不给图也能执行（用工作流自带图片）', noImgDone?.status === 'done', JSON.stringify(noImgDone?.error))
+  const noImgSent = mockState.lastPromptBody?.prompt || {}
+  ok(
+    '未给图时保留 LoadImage 默认文件',
+    noImgSent['31']?.inputs?.image === 'placeholder-a.png',
+    JSON.stringify(noImgSent['31']?.inputs),
+  )
+  ok(
+    '未给图时其它 LoadImage 不被静音',
+    !!noImgSent['32'],
+    JSON.stringify(Object.keys(noImgSent)),
+  )
   let textImgRejected = false
   try {
     await h.op('generate', {

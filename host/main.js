@@ -33,7 +33,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-13-host-42'
+export const HOST_BUILD = '2026-11-13-host-43'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -632,9 +632,8 @@ async function handleGenerateOp(payload) {
         400,
       )
     }
-    if (slots > 0 && rawRefs.length === 0) {
-      throw new ApiError('该工作流需要一张图片作为输入，请点输入框的 + 添加图片', 'INVALID_REQUEST', 400)
-    }
+    // v3.1.1: giving an image is optional — without one the workflow keeps the
+    // images already baked into its LoadImage nodes.
     if (rawRefs.length > slots) {
       throw new ApiError(
         `该工作流只启用了 ${slots} 个图像输入，最多只能给 ${slots} 张图`,

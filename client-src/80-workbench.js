@@ -2976,10 +2976,8 @@
             pushToast('info', '该工作流没有启用图像输入槽，先移除参考图或在设置里绑定图像输入')
             return
           }
-          if (slots > 0 && refCount === 0) {
-            pushToast('info', '该工作流需要一张图片作为输入，请点输入框的 + 添加')
-            return
-          }
+          // v3.1.1: providing an image is optional — the workflow's own LoadImage
+          // stays in effect when the composer has none.
           if (refCount > slots) {
             pushToast('info', `该工作流只启用了 ${slots} 个图像输入`)
             return

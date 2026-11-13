@@ -2,6 +2,16 @@
 
 First public release: **1.2.2**.
 
+## 3.1.1
+
+- **Fix: the image slot demanded an image before sending.** v3.1.0 rejected runs
+  with「该工作流需要一张图片作为输入」. Giving an image is now **optional**: when the
+  composer has none, the workflow keeps the image already stored in its
+  `LoadImage` nodes and nothing is muted; providing one replaces it (and mutes the
+  other `LoadImage` nodes as before).
+- The composer shows a hint in workflow mode: 「可选：点 + 用图片替换工作流自带的图」.
+
+
 ## 3.1.0 — ComfyUI 图像输入（单槽编辑）
 
 ComfyUI 工作流模式第一次支持**参考图/编辑**：可以给工作流一张图作为输入。

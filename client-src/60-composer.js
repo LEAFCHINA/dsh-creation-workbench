@@ -998,6 +998,15 @@
                   h(Icon, { name: 'spark', size: 11 }),
                   '存为模板',
                 ),
+                comfy && imageSlots > 0
+                  ? h(
+                      'span',
+                      { className: 'iw-composer-hint' },
+                      refList.length
+                        ? `图像已替换工作流里的 ${imageSlots} 个图像输入`
+                        : '可选：点 + 用图片替换工作流自带的图',
+                    )
+                  : null,
                 modelList.length === 0 && workflowList.length === 0
                   ? h(
                       'button',

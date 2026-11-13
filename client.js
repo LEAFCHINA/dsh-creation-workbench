@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-40'
+    const BUILD = '2026-11-13-client-m2-41'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -5184,6 +5184,15 @@ window.__ModuleLoader__.load({
                   h(Icon, { name: 'spark', size: 11 }),
                   '存为模板',
                 ),
+                comfy && imageSlots > 0
+                  ? h(
+                      'span',
+                      { className: 'iw-composer-hint' },
+                      refList.length
+                        ? `图像已替换工作流里的 ${imageSlots} 个图像输入`
+                        : '可选：点 + 用图片替换工作流自带的图',
+                    )
+                  : null,
                 modelList.length === 0 && workflowList.length === 0
                   ? h(
                       'button',
@@ -11619,10 +11628,8 @@ window.__ModuleLoader__.load({
             pushToast('info', '该工作流没有启用图像输入槽，先移除参考图或在设置里绑定图像输入')
             return
           }
-          if (slots > 0 && refCount === 0) {
-            pushToast('info', '该工作流需要一张图片作为输入，请点输入框的 + 添加')
-            return
-          }
+          // v3.1.1: providing an image is optional — the workflow's own LoadImage
+          // stays in effect when the composer has none.
           if (refCount > slots) {
             pushToast('info', `该工作流只启用了 ${slots} 个图像输入`)
             return
