@@ -2,6 +2,17 @@
 
 First public release: **1.2.2**.
 
+## 3.1.3
+
+- **Fix: the image slot could not be used in the composer.** The client's param
+  normalizer dropped `type: 'image'` (its whitelist predated the slot), so the slot
+  was rendered as a plain text field and the `+` button stayed disabled. Type
+  `'image'` is now preserved, `+` is enabled, and the slot is filtered out of the
+  normal parameter row.
+- Added a regression check that a saved image slot survives normalization
+  (`type === 'image'` and `role === 'image'`).
+
+
 ## 3.1.2
 
 - **Readable error when the workflow's own images are missing**: if a ComfyUI

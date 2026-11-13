@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-41'
+    const BUILD = '2026-11-13-client-m2-42'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -1001,8 +1001,12 @@ window.__ModuleLoader__.load({
       const nodeId = str(source.nodeId)
       const inputName = str(source.inputName)
       if (!nodeId || !inputName) return null
+      // v3.1.3: 'image' must survive normalization, otherwise the composer treats
+      // an image slot as a plain text param and the + button stays disabled.
       const type =
-        ['text', 'int', 'float', 'bool', 'select'].indexOf(source.type) >= 0 ? source.type : 'text'
+        ['text', 'int', 'float', 'bool', 'select', 'image'].indexOf(source.type) >= 0
+          ? source.type
+          : 'text'
       const options = (Array.isArray(source.options) ? source.options : [])
         .map((item) =>
           typeof item === 'string' ? item : typeof item === 'number' ? String(item) : '',

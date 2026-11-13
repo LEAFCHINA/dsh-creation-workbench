@@ -214,8 +214,12 @@
       const nodeId = str(source.nodeId)
       const inputName = str(source.inputName)
       if (!nodeId || !inputName) return null
+      // v3.1.3: 'image' must survive normalization, otherwise the composer treats
+      // an image slot as a plain text param and the + button stays disabled.
       const type =
-        ['text', 'int', 'float', 'bool', 'select'].indexOf(source.type) >= 0 ? source.type : 'text'
+        ['text', 'int', 'float', 'bool', 'select', 'image'].indexOf(source.type) >= 0
+          ? source.type
+          : 'text'
       const options = (Array.isArray(source.options) ? source.options : [])
         .map((item) =>
           typeof item === 'string' ? item : typeof item === 'number' ? String(item) : '',
