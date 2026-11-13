@@ -317,19 +317,39 @@ async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, 
       source: { kind: 'creation-workbench-agent' },
     },
   ]
-  const signal = AbortSignal.timeout(180000)
-  let call
+  // v2.3.5: reasoning-capable models can burn the whole output budget on
+  // reasoning and return no text at all. Ask for the smallest reasoning effort
+  // and retry with a bigger budget when the first attempt comes back empty or
+  // truncated by max-tokens.
+  let reasoningEfforts = []
+  let defaultEffort
   try {
-    call = await llm.prepareCall({ provider, model, maxTokens: 1600 }, signal)
-  } catch (error) {
-    throw new ApiError(
-      `DSH 模型准备失败（${provider}/${model}）：${String(error?.message || error)}`,
-      'AGENT_DSH_FAILED',
-      502,
-    )
+    const info = await llm.resolveModelInfo(provider, model)
+    if (info && info.reasoning && Array.isArray(info.reasoning.efforts)) {
+      reasoningEfforts = info.reasoning.efforts.map((effort) => String(effort?.id || '')).filter(Boolean)
+      defaultEffort = info.reasoning.defaultEffort
+    }
+  } catch {
+    // reasoning metadata is optional
   }
-  let output = ''
-  try {
+  const LOW_EFFORT_PREFERENCE = ['none', 'minimal', 'min', 'low', 'off']
+  const lowEffort = LOW_EFFORT_PREFERENCE.map((name) =>
+    reasoningEfforts.find((id) => id.toLowerCase() === name),
+  ).find(Boolean)
+
+  const attempt = async ({ maxTokens, effort, timeoutMs }) => {
+    const signal = AbortSignal.timeout(timeoutMs)
+    const config = { provider, model, maxTokens, ...(effort ? { reasoningEffort: effort } : {}) }
+    let call
+    try {
+      call = await llm.prepareCall(config, signal)
+    } catch (error) {
+      throw new ApiError(
+        `DSH 模型准备失败（${provider}/${model}）：${String(error?.message || error)}`,
+        'AGENT_DSH_FAILED',
+        502,
+      )
+    }
     const options = {
       ...call.config,
       messages,
@@ -338,36 +358,58 @@ async function runDshAgent({ ctx, settings, template, agent, text, imageBase64, 
       sessionId: bodySessionId,
       signal,
     }
-    for await (const chunk of call.stream(options)) {
-      if (!chunk || typeof chunk !== 'object') continue
-      if (chunk.type === 'text-delta' && typeof chunk.text === 'string') {
-        output += chunk.text
-      } else if (chunk.type === 'finish') {
-        const reason = chunk.reason
-        if (reason && reason.kind === 'aborted') {
-          throw new ApiError('DSH 模型调用已中止', 'AGENT_ABORTED', 499)
-        }
-        if (reason && reason.kind === 'error') {
-          throw new ApiError(
-            `DSH 模型调用失败：${String(reason.failure?.message || '未知错误')}`,
-            'AGENT_DSH_FAILED',
-            502,
-          )
+    let text = ''
+    let finishKind = ''
+    let reasoningChars = 0
+    try {
+      for await (const chunk of call.stream(options)) {
+        if (!chunk || typeof chunk !== 'object') continue
+        if (chunk.type === 'text-delta' && typeof chunk.text === 'string') {
+          text += chunk.text
+        } else if (chunk.type === 'reasoning-delta' && typeof chunk.text === 'string') {
+          reasoningChars += chunk.text.length
+        } else if (chunk.type === 'finish') {
+          const reason = chunk.reason
+          finishKind = String(reason?.kind || '')
+          if (reason && reason.kind === 'aborted') {
+            throw new ApiError('DSH 模型调用已中止', 'AGENT_ABORTED', 499)
+          }
+          if (reason && reason.kind === 'error') {
+            throw new ApiError(
+              `DSH 模型调用失败：${String(reason.failure?.message || '未知错误')}`,
+              'AGENT_DSH_FAILED',
+              502,
+            )
+          }
         }
       }
+    } catch (error) {
+      if (error instanceof ApiError) throw error
+      throw new ApiError(
+        `DSH 模型调用失败：${String(error?.message || error)}`,
+        'AGENT_DSH_FAILED',
+        502,
+      )
     }
-  } catch (error) {
-    if (error instanceof ApiError) throw error
-    throw new ApiError(
-      `DSH 模型调用失败：${String(error?.message || error)}`,
-      'AGENT_DSH_FAILED',
-      502,
-    )
+    return { text: text.trim(), finishKind, reasoningChars }
   }
-  const prompt = output.trim()
+
+  let result = await attempt({ maxTokens: 2048, effort: lowEffort, timeoutMs: 120000 })
+  if (!result.text || result.finishKind === 'max-tokens') {
+    // Reasoning-heavy first attempt (or an empty stop): retry with a wider budget.
+    result = await attempt({ maxTokens: 8192, effort: lowEffort, timeoutMs: 180000 })
+  }
+  const prompt = result.text
   if (!prompt) {
-    throw new ApiError('DSH 模型返回了空结果，请重试', 'AGENT_EMPTY', 502)
+    const reason =
+      result.finishKind === 'max-tokens'
+        ? '模型把输出额度都用在了推理上（已自动重试仍为空），可换一个非推理模型或缩短模板的附加上下文'
+        : result.reasoningChars > 0
+          ? '模型只输出推理内容、没有给出正文，请重试或换一个模型'
+          : '模型没有返回任何内容，请重试'
+    throw new ApiError(`DSH 模型返回了空结果：${reason}`, 'AGENT_EMPTY', 502)
   }
+
   return {
     prompt,
     model: `${provider}/${model}`,
