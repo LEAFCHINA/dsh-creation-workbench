@@ -2,6 +2,14 @@
 
 First public release: **1.2.2**.
 
+## 2.5.1
+
+- **Agent turns are up to 2× faster when the model runs long**: the empty-result
+  retry used to fire whenever the first attempt hit `max-tokens`, even when it
+  already produced usable text (a 76 s turn was actually two calls). It now
+  retries only for empty replies or replies shorter than 200 characters.
+
+
 ## 2.5.0 — ComfyUI 显存常驻可见 + 释放按钮 + 耗时诊断
 
 - **VRAM indicator in the composer** (ComfyUI mode): shows

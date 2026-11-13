@@ -441,8 +441,11 @@ async function runDshAgent({ ctx, settings, template, agent, conversation, outpu
 
   const startedAt = Date.now()
   let result = await attempt({ maxTokens: 4096, effort: lowEffort, timeoutMs: 150000 })
-  if (!result.text || result.finishKind === 'max-tokens') {
-    // Reasoning-heavy first attempt (or an empty stop): retry with a wider budget.
+  // v2.5.1: only pay for a second call when the first one is unusable. A reply
+  // that merely hit max-tokens but already contains real text is kept — the old
+  // condition retried those and doubled the wait (a 76 s turn was two calls).
+  const tooShort = result.text.length < 200
+  if (!result.text || (result.finishKind === 'max-tokens' && tooShort)) {
     result = await attempt({ maxTokens: 8192, effort: lowEffort, timeoutMs: 180000 })
   }
   void store
