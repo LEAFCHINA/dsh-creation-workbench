@@ -33,6 +33,14 @@ export const state = {
 }
 
 const OBJECT_INFO = {
+  LoadImage: {
+    input: {
+      required: {
+        image: [['placeholder-a.png', 'placeholder-b.png'], {}],
+      },
+    },
+    output: ['IMAGE', 'MASK'],
+  },
   KSampler: {
     input: {
       required: {

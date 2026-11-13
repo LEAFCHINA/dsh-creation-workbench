@@ -2,6 +2,15 @@
 
 First public release: **1.2.2**.
 
+## 3.1.2
+
+- **Readable error when the workflow's own images are missing**: if a ComfyUI
+  workflow's `LoadImage` nodes point at files this machine does not have (very
+  common after importing a workflow from another machine), the run now fails with
+  「工作流引用的图片在本机 ComfyUI 中不存在（节点 19：xxx.png）… 请点输入框的 + 选择一张图片后再发送」
+  instead of forwarding ComfyUI's raw validation error.
+
+
 ## 3.1.1
 
 - **Fix: the image slot demanded an image before sending.** v3.1.0 rejected runs

@@ -1339,7 +1339,24 @@ function normalizeGenerationCount(value) {
  *   { model:'comfy:wf_…', n, workflowId, workflowParams, displayName }
  * Returns `{ dialect:'comfyui', mode:'workflow', images:[{bytes,mime,w,h}] }`.
  */
-/** Upload one reference image to ComfyUI's input directory (v3.1). */
+/**
+ * v3.1.2: filenames ComfyUI can actually load for a LoadImage node.
+ * Used to catch workflows whose baked-in images do not exist on this machine.
+ */
+async function loadImageChoices(baseUrl, { signal } = {}) {
+  const info = await fetchObjectInfo(baseUrl, { signal })
+  if (!info.ok) return null
+  const spec = info.data && info.data.LoadImage
+  const required = spec && spec.input && spec.input.required
+  const combo = required && required.image
+  const list = Array.isArray(combo) ? combo[0] : null
+  if (!Array.isArray(list)) return null
+  return new Set(list.map((item) => String(item)))
+}
+
+/**
+ * Upload one reference image to ComfyUI's input directory (v3.1).
+ */
 async function uploadImageToComfy(baseUrl, { bytes, name, mime }) {
   const fileName = String(name || 'reference.png').replace(/[^\w.\-\u4e00-\u9fa5]/g, '_').slice(0, 120) || 'reference.png'
   const form = new FormData()
@@ -1421,6 +1438,31 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
         name: ref.name || 'reference.png',
       })
       values[imageSpecs[index].key] = uploaded
+    }
+  }
+
+  // v3.1.2: without a composer image the workflow runs with its baked-in LoadImage
+  // values — which may not exist on this machine. Fail early with a readable hint
+  // instead of forwarding ComfyUI's raw validation error.
+  if (imageSpecs.length > 0 && refList.length === 0 && isPlainObject(workflow.json)) {
+    const choices = await loadImageChoices(baseUrl, { signal })
+    if (choices) {
+      const missing = []
+      for (const [nodeId, node] of Object.entries(workflow.json)) {
+        if (!isPlainObject(node) || !/^LoadImage$/i.test(String(node.class_type || ''))) continue
+        const value = node.inputs && node.inputs.image
+        if (typeof value !== 'string' || !value) continue
+        if (!choices.has(value)) missing.push(`节点 ${nodeId}：${truncate(value, 60)}`)
+      }
+      if (missing.length > 0) {
+        throw new ApiError(
+          `工作流引用的图片在本机 ComfyUI 中不存在（${missing.slice(0, 3).join('；')}${
+            missing.length > 3 ? ' 等' : ''
+          }）。请点输入框的 + 选择一张图片后再发送`,
+          'COMFY_IMAGE_MISSING',
+          400,
+        )
+      }
     }
   }
 

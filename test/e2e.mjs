@@ -749,6 +749,34 @@ try {
     textImgRejected = err.status === 400 && /图像输入槽/.test(String(err.payload?.error || err.message))
   }
   ok('无图像槽的工作流带图被拒', textImgRejected)
+
+  // v3.1.2: a workflow whose baked-in LoadImage files are missing on this machine
+  resetState()
+  const brokenJson = JSON.parse(JSON.stringify(editWorkflow))
+  brokenJson['31'].inputs.image = 'definitely-missing.png'
+  const brokenSaved = await h.op('comfy.workflow.save', {
+    name: '图片缺失工作流',
+    category: 'edit',
+    json: brokenJson,
+    params: [{ key: 'img1', nodeId: '31', inputName: 'image', label: '原图', type: 'image' }],
+  })
+  const brokenId = brokenSaved?.workflow?.id
+  let missingError = ''
+  const brokenGen = await h.op('generate', {
+    workspaceId: editWsId,
+    conversationId: editConvId,
+    prompt: '用缺失的图',
+    refs: [],
+    params: { model: `comfy:${brokenId}`, n: 1, workflowId: brokenId, workflowParams: {}, displayName: '图片缺失' },
+  })
+  const brokenDone = await waitDone(brokenGen?.jobId)
+  missingError = String(brokenDone?.error || '')
+  ok(
+    '本机缺失的 LoadImage 文件给出可读提示',
+    /不存在/.test(missingError) && /点输入框的 \+ 选择一张图片/.test(missingError),
+    missingError.slice(0, 160),
+  )
+  await h.op('comfy.workflow.delete', { id: brokenId })
   await h.op('workspace.delete', { id: editWsId })
   await h.op('comfy.workflow.delete', { id: editId })
 
