@@ -660,6 +660,5 @@
 .iw-agent-chat .iw-agent-bubble{max-width:78%}
 .iw-composer.iw-agent-chat-mode .iw-composer-controls{display:none}
 .iw-conv-agent{flex:0 0 auto;font-size:9px;margin-right:3px;filter:saturate(1.2)}
-.iw-agent-link{font-size:10px;padding:0 6px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 35%,transparent);color:var(--dsw-alias-brand-primary);white-space:nowrap}
 
 `

@@ -25,7 +25,7 @@ const jobs = await import(`./jobs.js?rev=${encodeURIComponent(REV)}`)
 const comfy = await import(`./comfy.js?rev=${encodeURIComponent(REV)}`)
 const templates = await import(`./templates.js?rev=${encodeURIComponent(REV)}`)
 const agent = await import(`./agent.js?rev=${encodeURIComponent(REV)}`)
-const dshLink = await import(`./dsh-link.js?rev=${encodeURIComponent(REV)}`)
+const rollbackDsh = await import(`./rollback-dsh-links.js?rev=${encodeURIComponent(REV)}`)
 const proxyTransport = await import(`./proxy.js?rev=${encodeURIComponent(REV)}`)
 const localfs = await import(`./localfs.js?rev=${encodeURIComponent(REV)}`)
 const costs = await import(`./costs.js?rev=${encodeURIComponent(REV)}`)
@@ -33,7 +33,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-13-host-40'
+export const HOST_BUILD = '2026-11-13-host-41'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -200,6 +200,8 @@ async function dispatchOp(payload, env) {
           .purgeAgentConversations(rawSettings.agentRetentionDays)
           .catch(() => ({ deleted: 0 }))
       }
+      // v3.0.1: remove the workspace/session created by v3.0.0 (one-time, no-op after).
+      await rollbackDsh.rollbackDshLinks(env.ctx).catch(() => ({ cleaned: false }))
       return store.loadBootstrap(serverInfo(env))
     }
 
@@ -346,11 +348,6 @@ async function dispatchOp(payload, env) {
     case 'agent.models':
       return agent.listDshModels(env.ctx)
 
-    /* v3.0: associate an agent template with a real DSH workspace/session. */
-    case 'agent.link':
-      return dshLink.ensureDshSession(env.ctx, payload)
-    case 'agent.link.get':
-      return dshLink.listDshLinks(env.ctx, payload)
 
     /* v2.7: agent chat lives in a real workspace + conversation. */
     case 'agent.workspace': {

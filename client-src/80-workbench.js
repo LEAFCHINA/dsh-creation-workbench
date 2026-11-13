@@ -1267,8 +1267,6 @@
       const [templates, setTemplates] = useState([])
       const [templatesLoaded, setTemplatesLoaded] = useState(false)
       const [templateEdit, setTemplateEdit] = useState(null)
-      // v3.0: link to the real DSH workspace/session for an agent template.
-      const [dshLink, setDshLink] = useState(null)
       // v2.4: temporary agent session (drawer, not part of workspace history).
       const [agentSession, setAgentSession] = useState(null)
       const agentSessionRef = useRef(null)
@@ -1371,39 +1369,6 @@
       useEffect(() => {
         agentSessionRef.current = agentSession
       }, [agentSession])
-
-      // v3.0: associate the open agent conversation with a real DSH workspace/session
-      // (no UI navigation — the session just appears in the DSH sidebar).
-      useEffect(() => {
-        if (boot.status !== 'ready') return undefined
-        if (!isAgentConversation(conversation)) {
-          setDshLink(null)
-          return undefined
-        }
-        const templateId =
-          conversation && conversation.meta && conversation.meta.templateId
-            ? conversation.meta.templateId
-            : ''
-        if (!templateId) {
-          setDshLink(null)
-          return undefined
-        }
-        let cancelled = false
-        const templateName =
-          conversation && conversation.meta && conversation.meta.templateName
-            ? conversation.meta.templateName
-            : ''
-        rpc('agent.link', { templateId, templateName })
-          .then((data) => {
-            if (!cancelled && mountedRef.current && isObj(data)) setDshLink(data)
-          })
-          .catch(() => {
-            if (!cancelled && mountedRef.current) setDshLink(null)
-          })
-        return () => {
-          cancelled = true
-        }
-      }, [boot.status, conversation && conversation.id])
 
       // v2.5: keep the VRAM indicator fresh (ComfyUI keeps models resident).
       useEffect(() => {
@@ -3490,7 +3455,6 @@
                     ? h(AgentChatCanvas, {
                         conversation,
                         sending,
-                        dshLink,
                         onClear: handleClearAgentChat,
                         onInsert: insertFromAgent,
                         onCopy: copyAgentText,

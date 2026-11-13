@@ -740,21 +740,6 @@
               str(conversation && conversation.meta && conversation.meta.templateName) || 'Agent 会话',
             ),
             h('span', { className: 'iw-agent-drawer-badge' }, 'Agent 会话'),
-            props.dshLink && props.dshLink.ok
-              ? h(
-                  'span',
-                  {
-                    className: 'iw-agent-link',
-                    title:
-                      '已在 DSH 工作区「' +
-                      '创作工作台临时会话' +
-                      '」关联会话：' +
-                      String(props.dshLink.sessionId || '') +
-                      (props.dshLink.reusable ? '（复用已有）' : '（新建）'),
-                  },
-                  '已关联 DSH 会话',
-                )
-              : null,
             h(
               'button',
               {

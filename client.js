@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-38'
+    const BUILD = '2026-11-13-client-m2-39'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -781,7 +781,6 @@ window.__ModuleLoader__.load({
 .iw-agent-chat .iw-agent-bubble{max-width:78%}
 .iw-composer.iw-agent-chat-mode .iw-composer-controls{display:none}
 .iw-conv-agent{flex:0 0 auto;font-size:9px;margin-right:3px;filter:saturate(1.2)}
-.iw-agent-link{font-size:10px;padding:0 6px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 35%,transparent);color:var(--dsw-alias-brand-primary);white-space:nowrap}
 
 `
 /* ===== 10-helpers.js ===== */
@@ -3647,21 +3646,6 @@ window.__ModuleLoader__.load({
               str(conversation && conversation.meta && conversation.meta.templateName) || 'Agent 会话',
             ),
             h('span', { className: 'iw-agent-drawer-badge' }, 'Agent 会话'),
-            props.dshLink && props.dshLink.ok
-              ? h(
-                  'span',
-                  {
-                    className: 'iw-agent-link',
-                    title:
-                      '已在 DSH 工作区「' +
-                      '创作工作台临时会话' +
-                      '」关联会话：' +
-                      String(props.dshLink.sessionId || '') +
-                      (props.dshLink.reusable ? '（复用已有）' : '（新建）'),
-                  },
-                  '已关联 DSH 会话',
-                )
-              : null,
             h(
               'button',
               {
@@ -9789,8 +9773,6 @@ window.__ModuleLoader__.load({
       const [templates, setTemplates] = useState([])
       const [templatesLoaded, setTemplatesLoaded] = useState(false)
       const [templateEdit, setTemplateEdit] = useState(null)
-      // v3.0: link to the real DSH workspace/session for an agent template.
-      const [dshLink, setDshLink] = useState(null)
       // v2.4: temporary agent session (drawer, not part of workspace history).
       const [agentSession, setAgentSession] = useState(null)
       const agentSessionRef = useRef(null)
@@ -9893,39 +9875,6 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         agentSessionRef.current = agentSession
       }, [agentSession])
-
-      // v3.0: associate the open agent conversation with a real DSH workspace/session
-      // (no UI navigation — the session just appears in the DSH sidebar).
-      useEffect(() => {
-        if (boot.status !== 'ready') return undefined
-        if (!isAgentConversation(conversation)) {
-          setDshLink(null)
-          return undefined
-        }
-        const templateId =
-          conversation && conversation.meta && conversation.meta.templateId
-            ? conversation.meta.templateId
-            : ''
-        if (!templateId) {
-          setDshLink(null)
-          return undefined
-        }
-        let cancelled = false
-        const templateName =
-          conversation && conversation.meta && conversation.meta.templateName
-            ? conversation.meta.templateName
-            : ''
-        rpc('agent.link', { templateId, templateName })
-          .then((data) => {
-            if (!cancelled && mountedRef.current && isObj(data)) setDshLink(data)
-          })
-          .catch(() => {
-            if (!cancelled && mountedRef.current) setDshLink(null)
-          })
-        return () => {
-          cancelled = true
-        }
-      }, [boot.status, conversation && conversation.id])
 
       // v2.5: keep the VRAM indicator fresh (ComfyUI keeps models resident).
       useEffect(() => {
@@ -12012,7 +11961,6 @@ window.__ModuleLoader__.load({
                     ? h(AgentChatCanvas, {
                         conversation,
                         sending,
-                        dshLink,
                         onClear: handleClearAgentChat,
                         onInsert: insertFromAgent,
                         onCopy: copyAgentText,
