@@ -1191,6 +1191,7 @@
                             spec &&
                             spec.role !== 'prompt' &&
                             spec.type !== 'image' &&
+                            spec.type !== 'mask' &&
                             str(spec.key) !== batchParamKey,
                         )
                         .map((spec) => renderWorkflowParam(spec))

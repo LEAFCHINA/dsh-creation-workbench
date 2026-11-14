@@ -33,6 +33,15 @@ export const state = {
 }
 
 const OBJECT_INFO = {
+  LoadImageMask: {
+    input: {
+      required: {
+        image: [['placeholder-mask.png'], {}],
+        channel: [['alpha', 'red', 'green', 'blue'], {}],
+      },
+    },
+    output: ['MASK'],
+  },
   LoadImage: {
     input: {
       required: {

@@ -33,7 +33,7 @@ const agentTool = await import(`./tool.js?rev=${encodeURIComponent(REV)}`)
 
 const { ApiError, sendJson, readJsonBody, nowIso, isPlainObject, isId, truncate } = util
 
-export const HOST_BUILD = '2026-11-13-host-45'
+export const HOST_BUILD = '2026-11-14-host-46'
 
 /** Upload RPCs carry base64 image data (20MB → ~27MB JSON). */
 const MAX_RPC_BYTES = 48 * 1024 * 1024
@@ -660,11 +660,34 @@ async function handleGenerateOp(payload) {
   let maskMeta = null
   let maskId = ''
   const rawMaskId = payload.maskId
-  if (isComfy && rawMaskId !== undefined && rawMaskId !== null && rawMaskId !== '') {
-    // CONTRACT 补丁 v1.2 §2.5: v1 ComfyUI workflows do not support inpainting.
-    throw new ApiError('ComfyUI 工作流模式暂不支持局部重绘', 'INVALID_REQUEST', 400)
+  const wantsMask = rawMaskId !== undefined && rawMaskId !== null && rawMaskId !== ''
+  // v3.2: ComfyUI inpainting is supported when the workflow exposes a mask slot.
+  if (isComfy && wantsMask) {
+    const workflowId = String(params.workflowId || '')
+    let maskSlots = 0
+    if (workflowId) {
+      try {
+        const found = await comfy.getWorkflow(workflowId)
+        const specs = found && found.workflow && Array.isArray(found.workflow.params)
+          ? found.workflow.params
+          : []
+        maskSlots = specs.filter((spec) => spec && spec.type === 'mask').length
+      } catch {
+        maskSlots = 0
+      }
+    }
+    if (maskSlots === 0) {
+      throw new ApiError(
+        '该工作流没有启用蒙版输入：请在设置里给 LoadImageMask 节点勾选「蒙版输入」后再试',
+        'INVALID_REQUEST',
+        400,
+      )
+    }
+    if (rawRefs.length === 0) {
+      throw new ApiError('局部重绘需要一张原图作为输入', 'INVALID_REQUEST', 400)
+    }
   }
-  if (rawMaskId !== undefined && rawMaskId !== null && rawMaskId !== '') {
+  if (!isComfy && wantsMask) {
     if (typeof rawMaskId !== 'string' || !isId(rawMaskId, 'up')) {
       throw new ApiError('蒙版 ID 无效（必须是上传的 PNG 图片 id）', 'INVALID_REQUEST', 400)
     }
@@ -693,6 +716,19 @@ async function handleGenerateOp(payload) {
     maskMeta = loadedMask.meta
     maskId = rawMaskId
     params.mode = 'image_edit'
+  }
+
+  // v3.2: ComfyUI mask — validate the upload and hand it to the workflow mask slot.
+  if (isComfy && wantsMask) {
+    if (typeof rawMaskId !== 'string' || !isId(rawMaskId, 'up')) {
+      throw new ApiError('蒙版 ID 无效（必须是上传的 PNG 图片 id）', 'INVALID_REQUEST', 400)
+    }
+    const loadedMask = await store.loadRefById(rawMaskId, '蒙版')
+    if (loadedMask.meta.mime !== 'image/png') {
+      throw new ApiError('蒙版必须是 PNG 图片', 'INVALID_REQUEST', 400)
+    }
+    maskMeta = loadedMask.meta
+    maskId = rawMaskId
   }
 
   // CONTRACT 补丁 v1.1 §5: allocate jobId up-front, persist it on the running

@@ -780,6 +780,52 @@ try {
   await h.op('workspace.delete', { id: editWsId })
   await h.op('comfy.workflow.delete', { id: editId })
 
+  section('4l. ComfyUI 局部重绘（蒙版槽）')
+  resetState()
+  const maskSaved = await h.op('comfy.workflow.save', {
+    name: '重绘工作流',
+    category: 'edit',
+    json: editWorkflow,
+    params: [
+      { key: 'p1', nodeId: '6', inputName: 'text', label: '提示词', type: 'text', role: 'prompt' },
+      { key: 'img1', nodeId: '31', inputName: 'image', label: '原图', type: 'image' },
+      { key: 'mask1', nodeId: '40', inputName: 'image', label: '蒙版', type: 'mask' },
+    ],
+  })
+  const maskId = maskSaved?.workflow?.id
+  const maskList = await h.op('comfy.workflow.list')
+  const maskItem = (maskList?.workflows || []).find((item) => item.id === maskId)
+  ok(
+    '蒙版槽参数已保存',
+    (maskItem?.params || []).some((spec) => spec.type === 'mask' && spec.role === 'mask'),
+    JSON.stringify(maskItem?.params),
+  )
+  const maskWs = await h.op('workspace.create', { name: 'inpaint-e2e' })
+  const maskWsId = maskWs?.id || maskWs?.workspace?.id
+  const maskConv = await h.op('conversation.create', { workspaceId: maskWsId })
+  const maskConvId = maskConv?.id || maskConv?.conversation?.id
+  const upImage = await h.op('upload', { dataBase64: slotPng, name: 'src.png', mediaType: 'image/png' })
+  const imgRefId = upImage?.ref?.id
+  const upMask = await h.op('upload', { dataBase64: slotPng, name: 'mask.png', mediaType: 'image/png' })
+  const maskRefId = upMask?.ref?.id
+  const inpaintGen = await h.op('generate', {
+    workspaceId: maskWsId,
+    conversationId: maskConvId,
+    prompt: '把圆形换成月亮',
+    refs: [{ id: imgRefId }],
+    maskId: maskRefId,
+    params: { model: `comfy:${maskId}`, n: 1, workflowId: maskId, workflowParams: {}, displayName: '重绘工作流' },
+  })
+  const inpaintDone = await waitDone(inpaintGen?.jobId)
+  ok('带蒙版的重绘任务完成', inpaintDone?.status === 'done', JSON.stringify(inpaintDone?.error))
+  const inpaintSent = mockState.lastPromptBody?.prompt || {}
+  ok('原图写入 LoadImage 31', /mock-upload-/.test(String(inpaintSent['31']?.inputs?.image || '')), JSON.stringify(inpaintSent['31']?.inputs))
+  ok('蒙版写入 LoadImageMask 40', /mock-upload-/.test(String(inpaintSent['40']?.inputs?.image || '')), JSON.stringify(inpaintSent['40']?.inputs))
+  ok('蒙版节点未被静音', !!inpaintSent['40'], JSON.stringify(Object.keys(inpaintSent)))
+  ok('蒙版节点 channel 被切到 red', inpaintSent['40']?.inputs?.channel === 'red', JSON.stringify(inpaintSent['40']?.inputs))
+  await h.op('workspace.delete', { id: maskWsId })
+  await h.op('comfy.workflow.delete', { id: maskId })
+
   section('4i. Agent 真实会话（工作区 + 会话 + 消息持久化）')
   const chatTpl = await h.op('template.save', {
     name: 'Agent 会话测试',

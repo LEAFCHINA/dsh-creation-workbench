@@ -272,11 +272,38 @@
           return
         }
         let dataUrl = ''
+        // v3.2: ComfyUI's LoadImageMask reads a channel where 255 = repaint.
+        // The editor paints with transparency (0 = repaint), so export an opaque
+        // black/white PNG for ComfyUI and keep the alpha version for the API path.
+        const exportCanvas = mask
         try {
-          dataUrl = typeof mask.toDataURL === 'function' ? mask.toDataURL('image/png') : ''
+          if (props.target === 'comfy') {
+            const bw = document.createElement('canvas')
+            bw.width = mask.width
+            bw.height = mask.height
+            const bwContext = bw.getContext('2d')
+            const source = mask.getContext('2d')
+            if (bwContext && source) {
+              const imageData = source.getImageData(0, 0, mask.width, mask.height)
+              const data = imageData.data
+              for (let index = 0; index < data.length; index += 4) {
+                const alpha = data[index + 3]
+                const value = 255 - alpha
+                data[index] = value
+                data[index + 1] = value
+                data[index + 2] = value
+                data[index + 3] = 255
+              }
+              bwContext.putImageData(imageData, 0, 0)
+            }
+            dataUrl = bw.toDataURL('image/png')
+          } else {
+            dataUrl = typeof mask.toDataURL === 'function' ? mask.toDataURL('image/png') : ''
+          }
         } catch (error) {
           dataUrl = ''
         }
+        void exportCanvas
         if (!dataUrl) {
           if (pushToast) pushToast('error', '生成遮罩图片失败，请重试')
           return

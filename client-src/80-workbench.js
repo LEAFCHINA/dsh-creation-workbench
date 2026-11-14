@@ -2269,6 +2269,71 @@
           return
         }
         const modelList = settings.models
+        const comfySelected = isComfyModel(params.model)
+        if (comfySelected) {
+          const wf = findWorkflowById(workflowsRef.current, comfyWorkflowIdOf(params.model))
+          if (workflowMaskSpecs(wf).length === 0) {
+            pushToast(
+              'info',
+              '该工作流没有启用蒙版输入：设置 → 编辑参数 → 点 LoadImageMask 节点勾选「蒙版输入」',
+            )
+            return
+          }
+          const comfyPrompt = str(payload.prompt).trim()
+          if (!comfyPrompt) {
+            pushToast('error', '请填写重绘提示词')
+            return
+          }
+          try {
+            const uploadedMask = await rpc('upload', {
+              name: 'mask.png',
+              mediaType: 'image/png',
+              dataBase64: payload.maskBase64,
+            })
+            const maskRef = normalizeRef(uploadedMask && uploadedMask.ref)
+            if (!maskRef) throw new Error('遮罩上传失败')
+            const genParams = cleanGenParams(params, modelList, workflowsRef.current)
+            const result = await rpc('generate', {
+              workspaceId: wsId,
+              conversationId: convId,
+              prompt: comfyPrompt,
+              refs: [{ id: image.id }],
+              maskId: maskRef.id,
+              params: genParams,
+            })
+            if (!result || !result.turnId) throw new Error('生成请求没有返回任务 ID')
+            const turn = result.turn
+              ? normalizeTurn(result.turn)
+              : normalizeTurn({
+                  id: result.turnId,
+                  createdAt: nowIso(),
+                  prompt: comfyPrompt,
+                  params: genParams,
+                  status: 'running',
+                  images: [],
+                })
+            turn.jobId = turn.jobId || str(result.jobId)
+            turn.status = 'running'
+            setMaskEditor(null)
+            setDetail(null)
+            setJobs((previous) => [
+              ...previous.filter((job) => job.jobId !== turn.jobId),
+              {
+                jobId: turn.jobId,
+                turnId: turn.id,
+                workspaceId: wsId,
+                conversationId: convId,
+                status: 'queued',
+                progress: 0,
+              },
+            ])
+            startJobPolling(turn.jobId, turn.id, wsId, convId, comfyPrompt)
+            await refreshConversationQuiet(wsId, convId)
+          } catch (failure) {
+            pushToast('error', `局部重绘失败：${(failure && failure.message) || failure}`)
+          }
+          return
+        }
         const currentDialect = resolveDialect(params.model, modelList)
         let modelId = params.model
         if (currentDialect !== DIALECT.openai) {
@@ -3660,8 +3725,17 @@
               onInpaint: (image, turn) => {
                 // v1.2: ComfyUI workflow mode has no mask / inpaint path.
                 if (isComfyModel(paramsRef.current.model)) {
-                  pushToast('info', 'ComfyUI 工作流模式暂不支持局部重绘')
-                  return
+                  const wf = findWorkflowById(
+                    workflowsRef.current,
+                    comfyWorkflowIdOf(paramsRef.current.model),
+                  )
+                  if (workflowMaskSpecs(wf).length === 0) {
+                    pushToast(
+                      'info',
+                      '该工作流没有启用蒙版输入：设置 → 编辑参数 → 点 LoadImageMask 节点勾选「蒙版输入」',
+                    )
+                    return
+                  }
                 }
                 setDetail(null)
                 setMaskEditor({ image, turn })
@@ -3674,6 +3748,7 @@
               image: maskEditor.image,
               turn: maskEditor.turn,
               models: settings ? settings.models : [],
+              target: isComfyModel(paramsRef.current.model) ? 'comfy' : 'api',
               pushToast,
               onClose: () => setMaskEditor(null),
               onSubmit: handleInpaintSubmit,

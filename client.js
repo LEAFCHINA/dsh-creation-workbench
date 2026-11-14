@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-13-client-m2-43'
+    const BUILD = '2026-11-14-client-m2-44'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -983,6 +983,12 @@ window.__ModuleLoader__.load({
       return params.filter((spec) => spec && spec.type === 'image')
     }
 
+    /** v3.2: mask input slots (LoadImageMask nodes exposed as composer masks). */
+    function workflowMaskSpecs(workflow) {
+      const params = workflow && Array.isArray(workflow.params) ? workflow.params : []
+      return params.filter((spec) => spec && spec.type === 'mask')
+    }
+
     function workflowBatchSpec(workflow) {
       const params = workflow && Array.isArray(workflow.params) ? workflow.params : []
       return (
@@ -1004,7 +1010,7 @@ window.__ModuleLoader__.load({
       // v3.1.3: 'image' must survive normalization, otherwise the composer treats
       // an image slot as a plain text param and the + button stays disabled.
       const type =
-        ['text', 'int', 'float', 'bool', 'select', 'image'].indexOf(source.type) >= 0
+        ['text', 'int', 'float', 'bool', 'select', 'image', 'mask'].indexOf(source.type) >= 0
           ? source.type
           : 'text'
       const options = (Array.isArray(source.options) ? source.options : [])
@@ -1038,9 +1044,11 @@ window.__ModuleLoader__.load({
         role:
           source.type === 'image'
             ? 'image'
-            : source.role === 'prompt'
-              ? 'prompt'
-              : 'normal',
+            : source.type === 'mask'
+              ? 'mask'
+              : source.role === 'prompt'
+                ? 'prompt'
+                : 'normal',
         randomize: !!source.randomize,
       }
     }
@@ -1082,7 +1090,7 @@ window.__ModuleLoader__.load({
 
     /* ---- v1.2 ComfyUI parameter-exposure editor draft ------------------ */
 
-    const COMFY_PARAM_TYPES = ['text', 'int', 'float', 'bool', 'select', 'image']
+    const COMFY_PARAM_TYPES = ['text', 'int', 'float', 'bool', 'select', 'image', 'mask']
 
     function comfyInputTypeOf(input) {
       const source = isObj(input) ? input : {}
@@ -5381,6 +5389,7 @@ window.__ModuleLoader__.load({
                             spec &&
                             spec.role !== 'prompt' &&
                             spec.type !== 'image' &&
+                            spec.type !== 'mask' &&
                             str(spec.key) !== batchParamKey,
                         )
                         .map((spec) => renderWorkflowParam(spec))
@@ -5759,11 +5768,38 @@ window.__ModuleLoader__.load({
           return
         }
         let dataUrl = ''
+        // v3.2: ComfyUI's LoadImageMask reads a channel where 255 = repaint.
+        // The editor paints with transparency (0 = repaint), so export an opaque
+        // black/white PNG for ComfyUI and keep the alpha version for the API path.
+        const exportCanvas = mask
         try {
-          dataUrl = typeof mask.toDataURL === 'function' ? mask.toDataURL('image/png') : ''
+          if (props.target === 'comfy') {
+            const bw = document.createElement('canvas')
+            bw.width = mask.width
+            bw.height = mask.height
+            const bwContext = bw.getContext('2d')
+            const source = mask.getContext('2d')
+            if (bwContext && source) {
+              const imageData = source.getImageData(0, 0, mask.width, mask.height)
+              const data = imageData.data
+              for (let index = 0; index < data.length; index += 4) {
+                const alpha = data[index + 3]
+                const value = 255 - alpha
+                data[index] = value
+                data[index + 1] = value
+                data[index + 2] = value
+                data[index + 3] = 255
+              }
+              bwContext.putImageData(imageData, 0, 0)
+            }
+            dataUrl = bw.toDataURL('image/png')
+          } else {
+            dataUrl = typeof mask.toDataURL === 'function' ? mask.toDataURL('image/png') : ''
+          }
         } catch (error) {
           dataUrl = ''
         }
+        void exportCanvas
         if (!dataUrl) {
           if (pushToast) pushToast('error', '生成遮罩图片失败，请重试')
           return
@@ -7458,7 +7494,54 @@ window.__ModuleLoader__.load({
         ) || null
 
       const isImageSlotNode = (node) =>
-        !!node && /loadimage/i.test(str(node.classType)) && !!nodeImageInput(node)
+        !!node &&
+        /loadimage/i.test(str(node.classType)) &&
+        !/loadimagemask/i.test(str(node.classType)) &&
+        !!nodeImageInput(node)
+
+      // v3.2: LoadImageMask nodes receive the painted mask.
+      const isMaskSlotNode = (node) =>
+        !!node && /loadimagemask/i.test(str(node.classType)) && !!nodeImageInput(node)
+
+      const isMaskSlot = (matchKey) => {
+        const tpl = isObj(templates[matchKey]) ? templates[matchKey] : null
+        return !!tpl && tpl.type === 'mask'
+      }
+
+      const toggleMaskSlot = (node) => {
+        if (busy) return
+        const key = slotKeyOf(node)
+        if (isMaskSlot(key) && selected[key]) {
+          setSelected((previous) => ({ ...previous, [key]: false }))
+          setTemplates((previous) => ({
+            ...previous,
+            [key]: { ...(isObj(previous[key]) ? previous[key] : {}), type: 'text', role: 'normal' },
+          }))
+          setOrder((previous) => previous.filter((item) => item !== key))
+          return
+        }
+        setSelected((previous) => {
+          const next = { ...previous }
+          for (const other of Object.keys(next)) {
+            if (other !== key && isMaskSlot(other)) next[other] = false
+          }
+          next[key] = true
+          return next
+        })
+        setTemplates((previous) => {
+          const next = { ...previous }
+          for (const other of Object.keys(next)) {
+            if (other !== key && isMaskSlot(other)) {
+              next[other] = { ...next[other], type: 'text', role: 'normal' }
+            }
+          }
+          const current = isObj(next[key]) ? next[key] : {}
+          next[key] = { ...current, type: 'mask', role: 'mask', label: str(current.label) || '蒙版' }
+          return next
+        })
+        setOrder((previous) => (previous.indexOf(key) >= 0 ? previous : [...previous, key]))
+        setError('')
+      }
 
       const slotKeyOf = (node) => `${str(node.nodeId)}.image`
 
@@ -7858,7 +7941,13 @@ window.__ModuleLoader__.load({
             )
           : null
         const rows = (activeNode.inputs || [])
-          .filter((input) => !(isImageSlotNode(activeNode) && str(input.inputName) === (imageInput ? str(imageInput.inputName) : '')))
+          .filter(
+            (input) =>
+              !(
+                (isImageSlotNode(activeNode) || isMaskSlotNode(activeNode)) &&
+                str(input.inputName) === (imageInput ? str(imageInput.inputName) : '')
+              ),
+          )
           .map((input) => renderInputRow(activeNode, input))
         if (!rows.length) {
           rows.push(
@@ -7869,12 +7958,38 @@ window.__ModuleLoader__.load({
             ),
           )
         }
-        return h(React.Fragment, null, head, imageSlotBlock, ...rows)
+        const maskSlotKey = slotKeyOf(activeNode)
+        const maskOn = isMaskSlotNode(activeNode) && isMaskSlot(maskSlotKey) && !!selected[maskSlotKey]
+        const maskSlotBlock = isMaskSlotNode(activeNode)
+          ? h(
+              'div',
+              { key: 'mask-slot', className: 'iw-comfy-image-slot' },
+              h(
+                'label',
+                { className: 'iw-param-check' },
+                h('input', {
+                  type: 'checkbox',
+                  checked: maskOn,
+                  disabled: busy,
+                  onChange: () => toggleMaskSlot(activeNode),
+                }),
+                h('span', { className: 'iw-comfy-input-name' }, '蒙版输入（接收画布上画的遮罩）'),
+              ),
+              h(
+                'div',
+                { className: 'iw-field-hint' },
+                maskOn
+                  ? '已启用：在图片详情里点「局部重绘」，画好遮罩后发送。'
+                  : '勾选后，局部重绘的遮罩会写入这个 LoadImageMask。',
+              ),
+            )
+          : null
+        return h(React.Fragment, null, head, imageSlotBlock, maskSlotBlock, ...rows)
       }
 
       // v1.2.5: preview of the composer param row. Drag to reorder (HTML5 DnD),
       // with ↑↓ buttons as a keyboard/no-drag fallback; ✕ unchecks the param.
-      const orderTypeLabel = { text: '文本', int: '整数', float: '小数', bool: '开关', select: '选项', image: '图像' }
+      const orderTypeLabel = { text: '文本', int: '整数', float: '小数', bool: '开关', select: '选项', image: '图像', mask: '蒙版' }
       const renderOrderChip = (key, index) => {
         const tpl = isObj(templates[key]) ? templates[key] : {}
         const label = str(tpl.label) || str(tpl.inputName) || key
@@ -10964,6 +11079,71 @@ window.__ModuleLoader__.load({
           return
         }
         const modelList = settings.models
+        const comfySelected = isComfyModel(params.model)
+        if (comfySelected) {
+          const wf = findWorkflowById(workflowsRef.current, comfyWorkflowIdOf(params.model))
+          if (workflowMaskSpecs(wf).length === 0) {
+            pushToast(
+              'info',
+              '该工作流没有启用蒙版输入：设置 → 编辑参数 → 点 LoadImageMask 节点勾选「蒙版输入」',
+            )
+            return
+          }
+          const comfyPrompt = str(payload.prompt).trim()
+          if (!comfyPrompt) {
+            pushToast('error', '请填写重绘提示词')
+            return
+          }
+          try {
+            const uploadedMask = await rpc('upload', {
+              name: 'mask.png',
+              mediaType: 'image/png',
+              dataBase64: payload.maskBase64,
+            })
+            const maskRef = normalizeRef(uploadedMask && uploadedMask.ref)
+            if (!maskRef) throw new Error('遮罩上传失败')
+            const genParams = cleanGenParams(params, modelList, workflowsRef.current)
+            const result = await rpc('generate', {
+              workspaceId: wsId,
+              conversationId: convId,
+              prompt: comfyPrompt,
+              refs: [{ id: image.id }],
+              maskId: maskRef.id,
+              params: genParams,
+            })
+            if (!result || !result.turnId) throw new Error('生成请求没有返回任务 ID')
+            const turn = result.turn
+              ? normalizeTurn(result.turn)
+              : normalizeTurn({
+                  id: result.turnId,
+                  createdAt: nowIso(),
+                  prompt: comfyPrompt,
+                  params: genParams,
+                  status: 'running',
+                  images: [],
+                })
+            turn.jobId = turn.jobId || str(result.jobId)
+            turn.status = 'running'
+            setMaskEditor(null)
+            setDetail(null)
+            setJobs((previous) => [
+              ...previous.filter((job) => job.jobId !== turn.jobId),
+              {
+                jobId: turn.jobId,
+                turnId: turn.id,
+                workspaceId: wsId,
+                conversationId: convId,
+                status: 'queued',
+                progress: 0,
+              },
+            ])
+            startJobPolling(turn.jobId, turn.id, wsId, convId, comfyPrompt)
+            await refreshConversationQuiet(wsId, convId)
+          } catch (failure) {
+            pushToast('error', `局部重绘失败：${(failure && failure.message) || failure}`)
+          }
+          return
+        }
         const currentDialect = resolveDialect(params.model, modelList)
         let modelId = params.model
         if (currentDialect !== DIALECT.openai) {
@@ -12355,8 +12535,17 @@ window.__ModuleLoader__.load({
               onInpaint: (image, turn) => {
                 // v1.2: ComfyUI workflow mode has no mask / inpaint path.
                 if (isComfyModel(paramsRef.current.model)) {
-                  pushToast('info', 'ComfyUI 工作流模式暂不支持局部重绘')
-                  return
+                  const wf = findWorkflowById(
+                    workflowsRef.current,
+                    comfyWorkflowIdOf(paramsRef.current.model),
+                  )
+                  if (workflowMaskSpecs(wf).length === 0) {
+                    pushToast(
+                      'info',
+                      '该工作流没有启用蒙版输入：设置 → 编辑参数 → 点 LoadImageMask 节点勾选「蒙版输入」',
+                    )
+                    return
+                  }
                 }
                 setDetail(null)
                 setMaskEditor({ image, turn })
@@ -12369,6 +12558,7 @@ window.__ModuleLoader__.load({
               image: maskEditor.image,
               turn: maskEditor.turn,
               models: settings ? settings.models : [],
+              target: isComfyModel(paramsRef.current.model) ? 'comfy' : 'api',
               pushToast,
               onClose: () => setMaskEditor(null),
               onSubmit: handleInpaintSubmit,

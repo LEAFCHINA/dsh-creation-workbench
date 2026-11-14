@@ -86,7 +86,7 @@ const OBJECT_INFO_TTL_MS = 5 * 60 * 1000
 const MAX_SUGGESTED_PARAMS = 8
 const MAX_TEXT_PARAM = 20000
 const MAX_PARAM_OPTIONS = 200
-const PARAM_TYPES = ['text', 'int', 'float', 'bool', 'select', 'image']
+const PARAM_TYPES = ['text', 'int', 'float', 'bool', 'select', 'image', 'mask']
 const IMAGE_OUTPUT_CLASSES = new Set(['SaveImage', 'PreviewImage'])
 const VIDEO_OUTPUT_CLASSES = new Set(['VHS_VideoCombine'])
 
@@ -523,7 +523,7 @@ function coerceParamValue(type, options, min, max, raw) {
 }
 
 function defaultParamValue(type, options, min, max, raw) {
-  if (type === 'image') return ''
+  if (type === 'image' || type === 'mask') return ''
   if (raw !== undefined && raw !== null) return coerceParamValue(type, options, min, max, raw)
   if (type === 'bool') return false
   if (type === 'int' || type === 'float') return Number.isFinite(min) ? min : 0
@@ -550,7 +550,7 @@ function normalizeParamSpec(raw, index) {
     : String(raw.inputName == null ? '' : raw.inputName).trim()
   if (!inputName || inputName.length > 200) throw new ApiError(`${label}的输入名无效`, 'INVALID_REQUEST', 400)
   const type = PARAM_TYPES.includes(raw.type) ? raw.type : ''
-  if (!type) throw new ApiError(`${label}的类型无效（支持 text/int/float/bool/select/image）`, 'INVALID_REQUEST', 400)
+  if (!type) throw new ApiError(`${label}的类型无效（支持 text/int/float/bool/select/image/mask）`, 'INVALID_REQUEST', 400)
   const labelText = typeof raw.label === 'string' && raw.label.trim()
     ? raw.label.trim().slice(0, 100)
     : inputName
@@ -569,7 +569,8 @@ function normalizeParamSpec(raw, index) {
   let step = finiteOrNull(raw.step)
   if (step !== null && step <= 0) step = null
   // v3.1: an 'image' spec is an image input slot fed by the composer's + button.
-  const role = type === 'image' ? 'image' : raw.role === 'prompt' ? 'prompt' : 'normal'
+  const role =
+    type === 'image' ? 'image' : type === 'mask' ? 'mask' : raw.role === 'prompt' ? 'prompt' : 'normal'
   const randomize = raw.randomize === true && (type === 'int' || type === 'float')
   return {
     key,
@@ -1055,7 +1056,7 @@ function buildWorkflowGraph(template, specs, values, randomizeKeys, usedRandom) 
     let value = values[spec.key]
     // v3.1.1: an image slot without an uploaded file must not overwrite the
     // LoadImage value that is already stored in the workflow.
-    if (spec.type === 'image' && !value) continue
+    if ((spec.type === 'image' || spec.type === 'mask') && !value) continue
     const shouldRandomize = randomizeKeys
       ? randomizeKeys.has(spec.key)
       : spec.randomize === true
@@ -1381,7 +1382,7 @@ async function uploadImageToComfy(baseUrl, { bytes, name, mime }) {
   return sub ? `${sub}/${stored}` : stored
 }
 
-export async function generateImages({ settings, params, prompt, refs, signal, onProgress, onQueue }) {
+export async function generateImages({ settings, params, prompt, refs, mask, signal, onProgress, onQueue }) {
   const baseUrl = store.normalizeComfyBaseUrl(settings?.comfyBaseUrl)
   if (!baseUrl) throw new ApiError('尚未配置 ComfyUI 服务地址，请先在设置中填写', 'INVALID_REQUEST', 400)
 
@@ -1412,6 +1413,8 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
   // v3.1: image input slots. One enabled LoadImage node receives the composer's
   // image; every other LoadImage is muted for this run.
   const imageSpecs = specification.filter((spec) => spec && spec.type === 'image')
+  // v3.2: one optional mask slot (LoadImageMask.image) for inpainting.
+  const maskSpecs = specification.filter((spec) => spec && spec.type === 'mask')
   const refList = Array.isArray(refs) ? refs.filter((ref) => ref && ref.bytes) : []
   if (refList.length > 0 && imageSpecs.length === 0) {
     throw new ApiError(
@@ -1429,6 +1432,28 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
       400,
     )
   }
+  const maskBytes = mask && mask.bytes && mask.bytes.length > 0 ? mask : null
+  if (maskBytes && maskSpecs.length === 0) {
+    throw new ApiError(
+      '该工作流没有启用蒙版输入：请在设置里给 LoadImageMask 节点勾选「蒙版输入」后再试',
+      'INVALID_REQUEST',
+      400,
+    )
+  }
+  if (maskBytes) {
+    const uploadedMask = await uploadImageToComfy(baseUrl, {
+      bytes: maskBytes.bytes,
+      mime: 'image/png',
+      name: 'mask.png',
+    })
+    values[maskSpecs[0].key] = uploadedMask
+    // The plugin exports an opaque black/white PNG; read its red channel.
+    const maskNodeId = maskSpecs[0].nodeId
+    if (isPlainObject(params)) {
+      params.workflowMaskNode = maskNodeId
+    }
+  }
+
   if (imageSpecs.length > 0 && refList.length > 0) {
     for (let index = 0; index < refList.length; index += 1) {
       const ref = refList[index]
@@ -1522,10 +1547,16 @@ export async function generateImages({ settings, params, prompt, refs, signal, o
       if (isPlainObject(params) && Object.keys(usedRandom).length > 0) {
         params.workflowRandomValues = { ...usedRandom }
       }
+      if (maskBytes && isPlainObject(graph[maskSpecs[0].nodeId]?.inputs)) {
+        const maskInputs = graph[maskSpecs[0].nodeId].inputs
+        if (Object.prototype.hasOwnProperty.call(maskInputs, 'channel')) {
+          maskInputs.channel = 'red'
+        }
+      }
       if (imageSpecs.length > 0 && refList.length > 0) {
         const muted = muteUnusedImageNodes(
           graph,
-          imageSpecs.map((spec) => spec.nodeId),
+          [...imageSpecs.map((spec) => spec.nodeId), ...maskSpecs.map((spec) => spec.nodeId)],
         )
         if (muted.removed.length > 0) {
           void store

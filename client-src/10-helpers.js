@@ -196,6 +196,12 @@
       return params.filter((spec) => spec && spec.type === 'image')
     }
 
+    /** v3.2: mask input slots (LoadImageMask nodes exposed as composer masks). */
+    function workflowMaskSpecs(workflow) {
+      const params = workflow && Array.isArray(workflow.params) ? workflow.params : []
+      return params.filter((spec) => spec && spec.type === 'mask')
+    }
+
     function workflowBatchSpec(workflow) {
       const params = workflow && Array.isArray(workflow.params) ? workflow.params : []
       return (
@@ -217,7 +223,7 @@
       // v3.1.3: 'image' must survive normalization, otherwise the composer treats
       // an image slot as a plain text param and the + button stays disabled.
       const type =
-        ['text', 'int', 'float', 'bool', 'select', 'image'].indexOf(source.type) >= 0
+        ['text', 'int', 'float', 'bool', 'select', 'image', 'mask'].indexOf(source.type) >= 0
           ? source.type
           : 'text'
       const options = (Array.isArray(source.options) ? source.options : [])
@@ -251,9 +257,11 @@
         role:
           source.type === 'image'
             ? 'image'
-            : source.role === 'prompt'
-              ? 'prompt'
-              : 'normal',
+            : source.type === 'mask'
+              ? 'mask'
+              : source.role === 'prompt'
+                ? 'prompt'
+                : 'normal',
         randomize: !!source.randomize,
       }
     }
@@ -295,7 +303,7 @@
 
     /* ---- v1.2 ComfyUI parameter-exposure editor draft ------------------ */
 
-    const COMFY_PARAM_TYPES = ['text', 'int', 'float', 'bool', 'select', 'image']
+    const COMFY_PARAM_TYPES = ['text', 'int', 'float', 'bool', 'select', 'image', 'mask']
 
     function comfyInputTypeOf(input) {
       const source = isObj(input) ? input : {}

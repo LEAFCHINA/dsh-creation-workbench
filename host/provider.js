@@ -681,6 +681,7 @@ export async function generateImages({ config, settings, params, prompt, refs, s
       params,
       prompt,
       refs: Array.isArray(refs) ? refs : [],
+      mask: mask || null,
       signal,
       onProgress,
       onQueue,

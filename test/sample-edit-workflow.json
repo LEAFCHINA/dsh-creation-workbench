@@ -1,20 +1,4 @@
 {
-  "31": {
-    "class_type": "LoadImage",
-    "inputs": { "image": "placeholder-a.png", "upload": "image" }
-  },
-  "32": {
-    "class_type": "LoadImage",
-    "inputs": { "image": "placeholder-b.png", "upload": "image" }
-  },
-  "6": {
-    "class_type": "CLIPTextEncode",
-    "inputs": { "text": "edit prompt", "clip": ["30", 1] }
-  },
-  "7": {
-    "class_type": "CLIPTextEncode",
-    "inputs": { "text": "blurry", "clip": ["30", 1] }
-  },
   "3": {
     "class_type": "KSampler",
     "inputs": {
@@ -23,27 +7,101 @@
       "cfg": 7.5,
       "sampler_name": "euler",
       "scheduler": "normal",
-      "denoise": 0.6,
-      "model": ["30", 0],
-      "positive": ["6", 0],
-      "negative": ["7", 0],
-      "latent_image": ["31", 0]
+      "denoise": 0.75,
+      "model": [
+        "30",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "31",
+        0
+      ]
     }
   },
   "5": {
     "class_type": "EmptyLatentImage",
-    "inputs": { "width": 1024, "height": 1024, "batch_size": 1 }
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    }
   },
-  "30": {
-    "class_type": "CheckpointLoaderSimple",
-    "inputs": { "ckpt_name": "mock-model.safetensors" }
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "edit prompt",
+      "clip": [
+        "30",
+        1
+      ]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "blurry",
+      "clip": [
+        "30",
+        1
+      ]
+    }
   },
   "8": {
     "class_type": "VAEDecode",
-    "inputs": { "samples": ["3", 0], "vae": ["30", 2] }
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "30",
+        2
+      ]
+    }
   },
   "9": {
     "class_type": "SaveImage",
-    "inputs": { "filename_prefix": "edit", "images": ["8", 0] }
+    "inputs": {
+      "filename_prefix": "edit",
+      "images": [
+        "8",
+        0
+      ]
+    }
+  },
+  "30": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "mock-model.safetensors"
+    }
+  },
+  "31": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "placeholder-a.png",
+      "upload": "image"
+    }
+  },
+  "32": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "placeholder-b.png",
+      "upload": "image"
+    }
+  },
+  "40": {
+    "class_type": "LoadImageMask",
+    "inputs": {
+      "image": "placeholder-mask.png",
+      "channel": "alpha"
+    }
   }
 }

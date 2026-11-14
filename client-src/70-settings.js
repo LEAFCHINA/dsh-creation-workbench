@@ -1516,7 +1516,54 @@
         ) || null
 
       const isImageSlotNode = (node) =>
-        !!node && /loadimage/i.test(str(node.classType)) && !!nodeImageInput(node)
+        !!node &&
+        /loadimage/i.test(str(node.classType)) &&
+        !/loadimagemask/i.test(str(node.classType)) &&
+        !!nodeImageInput(node)
+
+      // v3.2: LoadImageMask nodes receive the painted mask.
+      const isMaskSlotNode = (node) =>
+        !!node && /loadimagemask/i.test(str(node.classType)) && !!nodeImageInput(node)
+
+      const isMaskSlot = (matchKey) => {
+        const tpl = isObj(templates[matchKey]) ? templates[matchKey] : null
+        return !!tpl && tpl.type === 'mask'
+      }
+
+      const toggleMaskSlot = (node) => {
+        if (busy) return
+        const key = slotKeyOf(node)
+        if (isMaskSlot(key) && selected[key]) {
+          setSelected((previous) => ({ ...previous, [key]: false }))
+          setTemplates((previous) => ({
+            ...previous,
+            [key]: { ...(isObj(previous[key]) ? previous[key] : {}), type: 'text', role: 'normal' },
+          }))
+          setOrder((previous) => previous.filter((item) => item !== key))
+          return
+        }
+        setSelected((previous) => {
+          const next = { ...previous }
+          for (const other of Object.keys(next)) {
+            if (other !== key && isMaskSlot(other)) next[other] = false
+          }
+          next[key] = true
+          return next
+        })
+        setTemplates((previous) => {
+          const next = { ...previous }
+          for (const other of Object.keys(next)) {
+            if (other !== key && isMaskSlot(other)) {
+              next[other] = { ...next[other], type: 'text', role: 'normal' }
+            }
+          }
+          const current = isObj(next[key]) ? next[key] : {}
+          next[key] = { ...current, type: 'mask', role: 'mask', label: str(current.label) || '蒙版' }
+          return next
+        })
+        setOrder((previous) => (previous.indexOf(key) >= 0 ? previous : [...previous, key]))
+        setError('')
+      }
 
       const slotKeyOf = (node) => `${str(node.nodeId)}.image`
 
@@ -1916,7 +1963,13 @@
             )
           : null
         const rows = (activeNode.inputs || [])
-          .filter((input) => !(isImageSlotNode(activeNode) && str(input.inputName) === (imageInput ? str(imageInput.inputName) : '')))
+          .filter(
+            (input) =>
+              !(
+                (isImageSlotNode(activeNode) || isMaskSlotNode(activeNode)) &&
+                str(input.inputName) === (imageInput ? str(imageInput.inputName) : '')
+              ),
+          )
           .map((input) => renderInputRow(activeNode, input))
         if (!rows.length) {
           rows.push(
@@ -1927,12 +1980,38 @@
             ),
           )
         }
-        return h(React.Fragment, null, head, imageSlotBlock, ...rows)
+        const maskSlotKey = slotKeyOf(activeNode)
+        const maskOn = isMaskSlotNode(activeNode) && isMaskSlot(maskSlotKey) && !!selected[maskSlotKey]
+        const maskSlotBlock = isMaskSlotNode(activeNode)
+          ? h(
+              'div',
+              { key: 'mask-slot', className: 'iw-comfy-image-slot' },
+              h(
+                'label',
+                { className: 'iw-param-check' },
+                h('input', {
+                  type: 'checkbox',
+                  checked: maskOn,
+                  disabled: busy,
+                  onChange: () => toggleMaskSlot(activeNode),
+                }),
+                h('span', { className: 'iw-comfy-input-name' }, '蒙版输入（接收画布上画的遮罩）'),
+              ),
+              h(
+                'div',
+                { className: 'iw-field-hint' },
+                maskOn
+                  ? '已启用：在图片详情里点「局部重绘」，画好遮罩后发送。'
+                  : '勾选后，局部重绘的遮罩会写入这个 LoadImageMask。',
+              ),
+            )
+          : null
+        return h(React.Fragment, null, head, imageSlotBlock, maskSlotBlock, ...rows)
       }
 
       // v1.2.5: preview of the composer param row. Drag to reorder (HTML5 DnD),
       // with ↑↓ buttons as a keyboard/no-drag fallback; ✕ unchecks the param.
-      const orderTypeLabel = { text: '文本', int: '整数', float: '小数', bool: '开关', select: '选项', image: '图像' }
+      const orderTypeLabel = { text: '文本', int: '整数', float: '小数', bool: '开关', select: '选项', image: '图像', mask: '蒙版' }
       const renderOrderChip = (key, index) => {
         const tpl = isObj(templates[key]) ? templates[key] : {}
         const label = str(tpl.label) || str(tpl.inputName) || key
