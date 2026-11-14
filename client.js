@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ */
 
     const API = '/dsh-creation-workbench'
-    const BUILD = '2026-11-14-client-m2-44'
+    const BUILD = '2026-11-14-client-m2-45'
     const SLOTS = { sidebar: 'sidebar.panellist', main: 'main' }
     const UI_STORAGE_KEY = 'dsh.creation-workbench.v1.ui'
     // v2.0.0: read the pre-rename key once so drafts/params/cache survive it.
@@ -7501,7 +7501,9 @@ window.__ModuleLoader__.load({
 
       // v3.2: LoadImageMask nodes receive the painted mask.
       const isMaskSlotNode = (node) =>
-        !!node && /loadimagemask/i.test(str(node.classType)) && !!nodeImageInput(node)
+        !!node &&
+        /^(loadimagemask|imagetomask|maskfromimage)$/i.test(str(node.classType)) &&
+        !!nodeImageInput(node)
 
       const isMaskSlot = (matchKey) => {
         const tpl = isObj(templates[matchKey]) ? templates[matchKey] : null

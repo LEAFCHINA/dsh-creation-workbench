@@ -324,7 +324,7 @@ for (const entry of [registered.sidebar[0], registered.main[0]]) {
 }
 
 console.log('\n== 4. 关键实现存在性（静态） ==')
-ok('BUILD 已递增', /2026-11-14-client-m2-44/.test(code))
+ok('BUILD 已递增', /2026-11-14-client-m2-45/.test(code))
 ok('comfy optgroup 文案存在', /ComfyUI 工作流/.test(code))
 ok('动态参数行类名存在', /iw-composer-params/.test(code))
 ok('参数编辑器存在', /ComfyParamEditor/.test(code))

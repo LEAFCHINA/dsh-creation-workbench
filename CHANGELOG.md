@@ -2,6 +2,12 @@
 
 First public release: **1.2.2**.
 
+## 3.2.1
+
+- Mask slots also recognize `ImageToMask` / `MaskFromImage` style nodes (not only
+  `LoadImageMask`), so more community inpaint workflows can be wired up.
+
+
 ## 3.2.0 — ComfyUI 局部重绘（蒙版槽）
 
 ComfyUI 工作流也能做局部重绘了：画布详情里「局部重绘」→ 画遮罩 → 遮罩写进工作流的

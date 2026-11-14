@@ -1523,7 +1523,9 @@
 
       // v3.2: LoadImageMask nodes receive the painted mask.
       const isMaskSlotNode = (node) =>
-        !!node && /loadimagemask/i.test(str(node.classType)) && !!nodeImageInput(node)
+        !!node &&
+        /^(loadimagemask|imagetomask|maskfromimage)$/i.test(str(node.classType)) &&
+        !!nodeImageInput(node)
 
       const isMaskSlot = (matchKey) => {
         const tpl = isObj(templates[matchKey]) ? templates[matchKey] : null
